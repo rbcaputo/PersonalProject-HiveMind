@@ -36,11 +36,12 @@ namespace HiveMind.Core.Domain.Behaviors
     private void AssignCareTask(Ant ant, ISimulationContext context)
     {
       // Assign location near nest center for caring activities
+      var nestPosition = ant.Colony.CenterPosition;
       var angle = context.Random.NextDouble() * 2 * Math.PI;
       var distance = context.Random.NextDouble() * 5.0; // Stay close to nest
 
-      var x = Math.Cos(angle) * distance;
-      var y = Math.Sin(angle) * distance;
+      var x = nestPosition.X + Math.Cos(angle) * distance;
+      var y = nestPosition.Y + Math.Sin(angle) * distance;
 
       _careTarget = new Position(x, y);
       ant.SetState(ActivityState.Caring);

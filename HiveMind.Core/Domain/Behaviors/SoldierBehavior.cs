@@ -53,7 +53,7 @@ namespace HiveMind.Core.Domain.Behaviors
     {
       if (context.CurrentTick - _lastPatrolUpdate >= _patrolUpdateInterval || _patrolTarget == null)
       {
-        AssignPatrolTarget(context);
+        AssignPatrolTarget(ant, context);
         _lastPatrolUpdate = context.CurrentTick;
       }
 
@@ -75,14 +75,15 @@ namespace HiveMind.Core.Domain.Behaviors
       }
     }
 
-    private void AssignPatrolTarget(ISimulationContext context)
+    private void AssignPatrolTarget(Ant ant, ISimulationContext context)
     {
       // Create patrol route around colony perimeter
+      var nestPosition = ant.Colony.CenterPosition;
       var angle = context.Random.NextDouble() * 2 * Math.PI;
       var distance = _patrolRadius * (0.8 + context.Random.NextDouble() * 0.4); // 80% - 120% of patrol radius
 
-      var x = Math.Cos(angle) * distance;
-      var y = Math.Sin(angle) * distance;
+      var x = nestPosition.X + Math.Cos(angle) * distance;
+      var y = nestPosition.Y + Math.Sin(angle) * distance;
 
       _patrolTarget = new Position(x, y);
     }

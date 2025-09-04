@@ -30,5 +30,15 @@ namespace HiveMind.Core.Domain.Interfaces
     /// Updated the entire colony for the current simulation tick
     /// </summary>
     void Update(ISimulationContext context);
+
+    /// <summary>
+    /// Adds food to the colony's food storage
+    /// </summary>
+    void AddFood(double amount);
+
+    /// <summary>
+    /// Attempts to consume food from the colony's storage
+    /// </summary>
+    bool ConsumeFood(double amount);
   }
 }

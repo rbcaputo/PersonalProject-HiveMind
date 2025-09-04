@@ -21,16 +21,21 @@ namespace HiveMind.Core.Domain.Entities
     public double MaxEnergy { get; private set; }
     public double MaxHealth { get; private set; }
     public double Speed { get; private set; }
+    public IColony Colony { get; private set; }
 
     private Position _targetPosition;
     private readonly IAntBehavior _behavior;
+    private int _zeroEnergyTicks = 0;
+    private const int MAX_ZERO_ENERGY_TICKS = 10; // Allow 10 ticks of zero energy before health damage
+    private const double STARVATION_HEALTH_DAMAGE = 2.0; // Health damage per starvation cycle
 
-    public Ant(AntRole role, Position startPosition, IAntBehavior behavior)
+    public Ant(AntRole role, Position startPosition, IAntBehavior behavior, IColony colony)
     {
       Role = role;
       Position = startPosition;
       _targetPosition = startPosition;
       _behavior = behavior ?? throw new ArgumentNullException(nameof(behavior));
+      Colony = colony ?? throw new ArgumentNullException(nameof(colony));
 
       InitializeAttributes();
       CurrentState = ActivityState.Idle;
@@ -52,6 +57,9 @@ namespace HiveMind.Core.Domain.Entities
       // Handle movement
       UpdateMovement(context);
 
+      // Check for starvation and health effects
+      HandleStarvation();
+
       // Check for death conditions
       CheckVitals();
 
@@ -68,13 +76,62 @@ namespace HiveMind.Core.Domain.Entities
 
     public void ConsumeEnergy(double amount)
     {
+      if (!IsAlive) return;
+
+      var previousEnergy = Energy;
       Energy = Math.Max(0, Energy - amount);
-      if (Energy == 0)
-        Health -= 1;
+
+      // If energy hits zero, start tracking starvation
+      if (Energy == 0 && previousEnergy > 0) _zeroEnergyTicks = 1;
     }
 
-    public void RestoreEnergy(double amount) =>
+    public void RestoreEnergy(double amount)
+    {
+      if (!IsAlive) return;
+
       Energy = Math.Min(MaxEnergy, Energy + amount);
+
+      // Reset starvation counter when energy is restored
+      if (Energy > 0) _zeroEnergyTicks = 0;
+    }
+
+    public bool IsStarving =>
+      Energy == 0 && _zeroEnergyTicks > 0;
+
+    public double HealthRatio =>
+      MaxHealth > 0 ? Energy / MaxHealth : 0;
+
+    public double EnergyRatio =>
+      MaxEnergy > 0 ? Energy / MaxEnergy : 0;
+
+
+    private void HandleStarvation()
+    {
+      if (Energy == 0)
+      {
+        _zeroEnergyTicks++;
+
+        // Apply health damage after prolonged zero energy
+        if (_zeroEnergyTicks >= MAX_ZERO_ENERGY_TICKS)
+        {
+          Health = Math.Max(0, Health - STARVATION_HEALTH_DAMAGE);
+          _zeroEnergyTicks = 0; // Reset counter after applying damage
+
+          // Set starving state for behavior awareness
+          // Force rest when starving
+          if (CurrentState != ActivityState.Dead) CurrentState = ActivityState.Resting; 
+        }
+      }
+      else if (Energy < MaxEnergy * 0.1) // Very low energy (below 10%)
+      {
+        // Gradual health degradation from very low energy
+        if (Health > 0)
+        {
+          var healthLoss = 0.1 * (1.0 - Energy / (MaxEnergy * 0.1)); // More damage the lower the energy
+          Health = Math.Max(0, Health - healthLoss);
+        }
+      }
+    }
 
     public void CollectFood(double amount) =>
       CarriedFood += amount;
@@ -122,8 +179,7 @@ namespace HiveMind.Core.Domain.Entities
 
     private void UpdateMovement(ISimulationContext context)
     {
-      if (CurrentState != ActivityState.Moving || Position.Equals(_targetPosition))
-        return;
+      if (CurrentState != ActivityState.Moving || Position.Equals(_targetPosition)) return;
 
       var distance = Position.DistanceTo(_targetPosition);
       var moveDistance = Speed * context.DeltaTime;
@@ -144,11 +200,22 @@ namespace HiveMind.Core.Domain.Entities
 
     private void CheckVitals()
     {
-      if (Health <= 0 || Age > GetMaxAge())
+      var maxAge = GetMaxAge();
+
+      if (Health <= 0 || Age > maxAge)
       {
         CurrentState = ActivityState.Dead;
         Health = 0;
         Energy = 0;
+        _zeroEnergyTicks = 0;
+      }
+
+      // Extreme old age causes gradual health decline
+      if (Age > maxAge * 0.8) // After 80% of max age
+      {
+        var agingFactor = (double)(Age - maxAge * 0.8) / (maxAge * 0.2);
+        var agingDamage = 0.05 * agingFactor; // Gradual aging damage
+        Health = Math.Max(Health, Health - agingDamage);
       }
     }
 

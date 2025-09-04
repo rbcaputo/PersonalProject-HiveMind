@@ -41,17 +41,17 @@ namespace HiveMind.Core.Domain.Behaviors
       if (random < 0.6) // 60% chance to build/maintain
       {
         ant.SetState(ActivityState.Building);
-        _workTarget = GetRandomPositionNearNest(context, 10.0);
+        _workTarget = GetRandomPositionNearNest(ant, context, 10.0);
       }
       else if (random < 0.8) // 20% chance to care for young
       {
         ant.SetState(ActivityState.Caring);
-        _workTarget = GetRandomPositionNearNest(context, 5.0);
+        _workTarget = GetRandomPositionNearNest(ant, context, 5.0);
       }
       else // 20% chance to patrol
       {
         ant.SetState(ActivityState.Moving);
-        _workTarget = GetRandomPositionNearNest(context, 15.0);
+        _workTarget = GetRandomPositionNearNest(ant, context, 15.0);
       }
     }
 
@@ -91,14 +91,14 @@ namespace HiveMind.Core.Domain.Behaviors
       ant.SetState(ActivityState.Idle);
     }
 
-    private static Position GetRandomPositionNearNest(ISimulationContext context, double radius)
+    private static Position GetRandomPositionNearNest(Ant ant, ISimulationContext context, double radius)
     {
-      // For now, assume nest is at origin - this would be improved with colony reference
+      var nestPosition = ant.Colony.CenterPosition;
       var angle = context.Random.NextDouble() * 2 * Math.PI;
       var distance = context.Random.NextDouble() * radius;
 
-      var x = Math.Cos(angle) * distance;
-      var y = Math.Sin(angle) * distance;
+      var x = nestPosition.X + Math.Cos(angle) * distance;
+      var y = nestPosition.Y + Math.Sin(angle) * distance;
 
       return new(x, y);
     }

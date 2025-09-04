@@ -36,11 +36,12 @@ namespace HiveMind.Core.Domain.Behaviors
     private void AssignBuildTask(Ant ant, ISimulationContext context)
     {
       // Assign construction target around the colony
+      var nestPosition = ant.Colony.CenterPosition;
       var angle = context.Random.NextDouble() * 2 * Math.PI;
       var distance = context.Random.NextDouble() * 15.0; // Moderate range for construction
 
-      var x = Math.Cos(angle) * distance;
-      var y = Math.Sin(angle) * distance;
+      var x = nestPosition.X + Math.Cos(angle) * distance;
+      var y = nestPosition.Y + Math.Sin(angle) * distance;
 
       _buildTarget = new Position(x, y);
       ant.SetState(ActivityState.Building);

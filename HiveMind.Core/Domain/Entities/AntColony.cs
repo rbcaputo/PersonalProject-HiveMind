@@ -68,14 +68,21 @@ namespace HiveMind.Core.Domain.Entities
         ant.Update(context);
 
         // Collect food from returning foragers
-        if (ant.Role == AntRole.Forager && ant.CarriedFood > 0 && ant.Position.DistanceTo(CenterPosition) < 2.0)
-          TotalFoodStored += ant.DropFood();
+        if (ant.Role == AntRole.Forager && ant.CarriedFood > 0)
+        {
+          var distanceToNest = ant.Position.DistanceTo(CenterPosition);
+          if (distanceToNest < 2.0)
+          {
+            var droppedFood = ant.DropFood();
+            TotalFoodStored += droppedFood;
+          }
+        }
       }
 
       // Remove dead ants
-      var deadAnts = _members.Where(kv => !kv.Value.IsAlive).ToList();
-      foreach (var deadAnt in deadAnts)
-        _members.Remove(deadAnt.Key);
+      var deadAntIds = _members.Where(kv => !kv.Value.IsAlive).Select(kv => kv.Key).ToList();
+      foreach (var deadAntId in deadAntIds)
+        _members.Remove(deadAntId);
 
       // Colony-level behaviors
       ManagePopulation(context);
@@ -108,14 +115,14 @@ namespace HiveMind.Core.Domain.Entities
     private void InitializeColony()
     {
       // Create queen
-      var queen = new Ant(AntRole.Queen, CenterPosition, AntBehaviorFactory.CreateBehavior(AntRole.Queen));
+      var queen = new Ant(AntRole.Queen, CenterPosition, AntBehaviorFactory.CreateBehavior(AntRole.Queen), this);
       AddMember(queen);
 
       // Create initial workers
       for (int i = 0; i < 10; i++)
       {
         var position = GetRandomPositionNearCenter(5.0);
-        var worker = new Ant(AntRole.Worker, position, AntBehaviorFactory.CreateBehavior(AntRole.Worker));
+        var worker = new Ant(AntRole.Worker, position, AntBehaviorFactory.CreateBehavior(AntRole.Worker), this);
         AddMember(worker);
       }
 
@@ -123,7 +130,7 @@ namespace HiveMind.Core.Domain.Entities
       for (int i = 0; i < 5; i++)
       {
         var position = GetRandomPositionNearCenter(3.0);
-        var forager = new Ant(AntRole.Forager, position, AntBehaviorFactory.CreateBehavior(AntRole.Forager));
+        var forager = new Ant(AntRole.Forager, position, AntBehaviorFactory.CreateBehavior(AntRole.Forager), this);
         AddMember(forager);
       }
     }
@@ -164,7 +171,7 @@ namespace HiveMind.Core.Domain.Entities
       var role = DetermineNewAntRole();
       var position = GetRandomPositionNearCenter(2.0);
 
-      var newAnt = new Ant(role, position, AntBehaviorFactory.CreateBehavior(role));
+      var newAnt = new Ant(role, position, AntBehaviorFactory.CreateBehavior(role), this);
       AddMember(newAnt);
 
       // Consume food for reproduction
@@ -195,9 +202,9 @@ namespace HiveMind.Core.Domain.Entities
       // This would require more sophisticated role switching in a full implementation
     }
 
-    private Position GetRandomPositionNearCenter(double radius)
+    private Position GetRandomPositionNearCenter(double radius, ISimulationContext? context = null)
     {
-      var random = new Random();
+      var random = context?.Random ?? new Random();
       var angle = random.NextDouble() * 2 * Math.PI;
       var distance = random.NextDouble() * radius;
 
