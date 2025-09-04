@@ -26,6 +26,11 @@ namespace HiveMind.Application.Services
     private DateTime _simulationStartTime;
     private bool _disposed = false;
 
+    private int _totalBirthCount = 0;
+    private int _totalDeathCount = 0;
+    private int _lastTickPopulation = 0;
+    private readonly Dictionary<Guid, bool> _antLifeTracker = [];
+
     public SimulationState State => _state;
     public long CurrentTick => _currentTick;
     public IReadOnlyCollection<IColony> Colonies => _colonies.AsReadOnly();
@@ -67,8 +72,26 @@ namespace HiveMind.Application.Services
       // Reset counters
       _currentTick = 0;
 
+      // Reset statistics tracking
+      _totalBirthCount = 0;
+      _totalDeathCount = 0;
+      _lastTickPopulation = 0;
+      _antLifeTracker.Clear();
+
+      // Initialize tracking with starting population
+      var allAnts = _colonies.SelectMany(c => c.Members).OfType<Ant>();
+      foreach (var ant in allAnts)
+      {
+        if (ant.IsAlive)
+        {
+          _antLifeTracker[ant.Id] = true;
+          _totalBirthCount++; // Count initial population as births
+        }
+      }
+      _lastTickPopulation = _antLifeTracker.Count;
+
       SetState(SimulationState.Initialized);
-      _logger?.LogInformation("Simulation initialized with {ColonyCount} colonies", _colonies.Count);
+      _logger?.LogInformation("Simulation initialized with {ColonyCount} colonies and {InitialPopulation} initial ants", _colonies.Count, _lastTickPopulation);
 
       return Task.CompletedTask;
     }
@@ -165,15 +188,16 @@ namespace HiveMind.Application.Services
 
       // Update all colonies
       var activeColonies = _colonies.Where(c => c.IsActive).ToList();
-      foreach (var colony in activeColonies)
-        colony.Update(_context);
+      foreach (var colony in activeColonies) colony.Update(_context);
 
       // Remove inactive colonies
       _colonies.RemoveAll(c => !c.IsActive);
 
       // Update environment
-      if (_environment is SimulationEnvironment simEnv)
-        simEnv.Update(_context);
+      if (_environment is SimulationEnvironment simEnv) simEnv.Update(_context);
+
+      // Track births and deaths
+      UpdateBirthDeathStatistics();
 
       _currentTick++;
       stepWatch.Stop();
@@ -185,14 +209,54 @@ namespace HiveMind.Application.Services
       Tick?.Invoke(this, new SimulationTickEventArgs(_currentTick, _configuration.DeltaTime, statistics));
 
       // Check termination conditions
-      if (_configuration.MaxTicks > 0 && _currentTick >= _configuration.MaxTicks)
-        // Use Task.Run to avoid blocking the timer thread
-        Task.Run(StopAsync);
+      if (_configuration.MaxTicks > 0 && _currentTick >= _configuration.MaxTicks) Task.Run(StopAsync); // Use Task.Run to avoid blocking the timer thread
       else if (_colonies.Count == 0)
       {
         _logger?.LogInformation("All colonies extinct - stopping simulation");
         Task.Run(StopAsync);
       }
+    }
+
+    private void UpdateBirthDeathStatistics()
+    {
+      var allAnts = _colonies.SelectMany(c => c.Members).OfType<Ant>().ToList();
+      var currentAliveAnts = new HashSet<Guid>();
+
+      // Check current status of all ants
+      foreach (var ant in allAnts)
+      {
+        if (ant.IsAlive)
+        {
+          currentAliveAnts.Add(ant.Id);
+
+          // If this ant wasn't tracked before, it's a birth
+          if (!_antLifeTracker.ContainsKey(ant.Id))
+          {
+            _antLifeTracker[ant.Id] = true;
+            _totalBirthCount++;
+          }
+        }
+        else
+        {
+          // If this ant was alive last tick but is dead now, it's a death
+          if (_antLifeTracker.TryGetValue(ant.Id, out var wasAlive) && wasAlive)
+          {
+            _antLifeTracker[ant.Id] = false;
+            _totalDeathCount++;
+          }
+        }
+      }
+
+      // Clean up tracking for ants that no longer exist (were removed from colonies)
+      var antsToRemove = _antLifeTracker.Keys.Except([.. allAnts.Select(a => a.Id)]);
+      foreach (var antId in antsToRemove)
+      {
+        if (_antLifeTracker[antId]) _totalDeathCount++; // Was alive, now gone = death
+
+        _antLifeTracker.Remove(antId);
+      }
+
+      _lastTickPopulation = currentAliveAnts.Count;
     }
 
     private SimulationStatistics GenerateStatistics()
@@ -207,8 +271,8 @@ namespace HiveMind.Application.Services
         ActiveColonies = _colonies.Count(c => c.IsActive),
         TotalFoodStored = _colonies.Sum(c => c.TotalFoodStored),
         AvgEnergyLevel = aliveAnts.Count != 0 ? aliveAnts.Average(a => a.Energy) : 0,
-        DeathCount = allAnts.Count(a => !a.IsAlive),
-        BirthCount = aliveAnts.Count, // Simplified - would track births separately in full implementation
+        BirthCount = _totalBirthCount,
+        DeathCount = _totalDeathCount,
         PopulationByRole = aliveAnts.GroupBy(a => a.Role.ToString())
           .ToDictionary(g => g.Key, g => g.Count()),
         SimulationTimeElapsed = _performanceTimer.Elapsed.TotalSeconds
@@ -252,6 +316,7 @@ namespace HiveMind.Application.Services
           _logger?.LogWarning(ex, "Error disposing simulation timer");
         }
 
+        _antLifeTracker.Clear();
         _performanceTimer?.Stop();
         _disposed = true;
 
