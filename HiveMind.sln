@@ -1,0 +1,51 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36414.22
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HiveMind.Core", "HiveMind.Core\HiveMind.Core.csproj", "{ACA89105-8BC9-468B-AD18-F2B27DFA2956}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HiveMind.Application", "HiveMind.Application\HiveMind.Application.csproj", "{ACCED845-569B-4A90-B55F-8897356AC627}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HiveMind.Console", "HiveMind.Console\HiveMind.Console.csproj", "{A5B49FD2-2996-4A42-ADDC-48B1FBD5DA77}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HiveMind.Tests", "HiveMind.Tests\HiveMind.Tests.csproj", "{3E11116E-0A8E-4DB7-A970-D0F8A741982F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HiveMind.Infrastructure", "HiveMind.Infrastructure\HiveMind.Infrastructure.csproj", "{26A45188-CE37-4B32-B143-C2F4808ECA05}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{ACA89105-8BC9-468B-AD18-F2B27DFA2956}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ACA89105-8BC9-468B-AD18-F2B27DFA2956}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ACA89105-8BC9-468B-AD18-F2B27DFA2956}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ACA89105-8BC9-468B-AD18-F2B27DFA2956}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ACCED845-569B-4A90-B55F-8897356AC627}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ACCED845-569B-4A90-B55F-8897356AC627}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ACCED845-569B-4A90-B55F-8897356AC627}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ACCED845-569B-4A90-B55F-8897356AC627}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A5B49FD2-2996-4A42-ADDC-48B1FBD5DA77}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A5B49FD2-2996-4A42-ADDC-48B1FBD5DA77}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A5B49FD2-2996-4A42-ADDC-48B1FBD5DA77}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A5B49FD2-2996-4A42-ADDC-48B1FBD5DA77}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3E11116E-0A8E-4DB7-A970-D0F8A741982F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3E11116E-0A8E-4DB7-A970-D0F8A741982F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3E11116E-0A8E-4DB7-A970-D0F8A741982F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3E11116E-0A8E-4DB7-A970-D0F8A741982F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{26A45188-CE37-4B32-B143-C2F4808ECA05}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{26A45188-CE37-4B32-B143-C2F4808ECA05}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{26A45188-CE37-4B32-B143-C2F4808ECA05}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{26A45188-CE37-4B32-B143-C2F4808ECA05}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C2C89D46-747C-4A97-B026-814BE61C40E0}
+	EndGlobalSection
+EndGlobal
