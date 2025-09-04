@@ -106,45 +106,54 @@ namespace HiveMind.Application.Services
       return Task.CompletedTask;
     }
 
-    public Task StopAsync()
+    public async Task StopAsync()
     {
       if (_state == SimulationState.Uninitialized || _state == SimulationState.Stopped)
-        return Task.CompletedTask;
+        return;
 
+      // Stop the timer
       _simulationTimer.Change(Timeout.Infinite, Timeout.Infinite);
+
+      // Wait a brief moment for any ongoing timer callbacks to complete
+      await Task.Delay(50);
+
       _performanceTimer.Stop();
 
       SetState(SimulationState.Stopped);
       _logger?.LogInformation("Simulation stopped at tick {Tick}", _currentTick);
-
-      return Task.CompletedTask;
     }
 
-    public async Task StepAsync()
+    public Task StepAsync()
     {
       if (_state != SimulationState.Initialized && _state != SimulationState.Paused)
         throw new InvalidOperationException($"Cannot step simulation in state: {_state}");
 
-      await ExecuteSimulationStep();
+      ExecuteSimulationStep();
+
+      return Task.CompletedTask;
     }
 
     private void SimulationTimerCallback(object? state)
     {
-      if (_state == SimulationState.Running)
+      if (_disposed || _state != SimulationState.Running)
+        return;
+
+      try
       {
-        try
-        {
-          ExecuteSimulationStep().Wait();
-        }
-        catch (Exception ex)
-        {
-          _logger?.LogError(ex, "Error during simulation step");
-          SetState(SimulationState.Error);
-        }
+        ExecuteSimulationStep();
+      }
+      catch (ObjectDisposedException)
+      {
+        return; // Timer was disposed during execution - this is expected during shutdown
+      }
+      catch (Exception ex)
+      {
+        _logger?.LogError(ex, "Error during simulation step");
+        SetState(SimulationState.Error);
       }
     }
 
-    private async Task ExecuteSimulationStep()
+    private void ExecuteSimulationStep()
     {
       if (_context == null || _configuration == null)
         throw new InvalidOperationException("Simulation not properly initialized");
@@ -177,11 +186,12 @@ namespace HiveMind.Application.Services
 
       // Check termination conditions
       if (_configuration.MaxTicks > 0 && _currentTick >= _configuration.MaxTicks)
-        await StopAsync();
+        // Use Task.Run to avoid blocking the timer thread
+        Task.Run(StopAsync);
       else if (_colonies.Count == 0)
       {
         _logger?.LogInformation("All colonies extinct - stopping simulation");
-        await StopAsync();
+        Task.Run(StopAsync);
       }
     }
 
@@ -219,7 +229,29 @@ namespace HiveMind.Application.Services
     {
       if (!_disposed)
       {
-        _simulationTimer?.Dispose();
+        // Stop the simulation first to prevent race conditions
+        if (_state == SimulationState.Running || _state == SimulationState.Paused)
+        {
+          try
+          {
+            StopAsync().Wait(TimeSpan.FromSeconds(5)); // Wait max 5 seconds for clean shutdown
+          }
+          catch (Exception ex)
+          {
+            _logger?.LogWarning(ex, "Error during simulation shutdown in Dispose");
+          }
+        }
+
+        // Dispose timer safely
+        try
+        {
+          _simulationTimer.Dispose();
+        }
+        catch (Exception ex)
+        {
+          _logger?.LogWarning(ex, "Error disposing simulation timer");
+        }
+
         _performanceTimer?.Stop();
         _disposed = true;
 

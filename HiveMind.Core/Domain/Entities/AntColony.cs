@@ -62,8 +62,8 @@ namespace HiveMind.Core.Domain.Entities
         return;
 
       // Update all colony members
-      var membesrToUpdate = _members.Values.Where(ant => ant.IsAlive).ToList();
-      foreach (var ant in membesrToUpdate)
+      var membersToUpdate = _members.Values.Where(ant => ant.IsAlive).ToList();
+      foreach (var ant in membersToUpdate)
       {
         ant.Update(context);
 
