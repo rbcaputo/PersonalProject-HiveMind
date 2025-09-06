@@ -16,10 +16,8 @@
     public TimeSpan TotalRuntime { get; set; }
     public long TotalTicks { get; set; }
 
-    public override string ToString()
-    {
-      return $"AvgTick: {AverageTickTime:F2}ms, Memory: {CurrentMemoryUsage / 1024 / 1024}MB, " +
-        $"Population: {CurrentPopulation}, Runtime: {TotalRuntime:hh\\:mm\\:ss}";
-    }
+    public override string ToString() =>
+      $"AvgTick: {AverageTickTime:F2}ms, Memory: {CurrentMemoryUsage / 1024 / 1024}MB, " +
+      $"Population: {CurrentPopulation}, Runtime: {TotalRuntime:hh\\:mm\\:ss}";
   }
 }

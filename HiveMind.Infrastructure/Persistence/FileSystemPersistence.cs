@@ -17,7 +17,7 @@ namespace HiveMind.Infrastructure.Persistence
     {
       _basePath = basePath ?? Path.Combine(GetFolderPath(SpecialFolder.LocalApplicationData), "HiveMind", "Snapshots");
       _logger = logger;
-      _jsonOptions = new JsonSerializerOptions
+      _jsonOptions = new()
       {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -30,10 +30,10 @@ namespace HiveMind.Infrastructure.Persistence
     {
       try
       {
-        var fileName = $"{snapshot.Id:D}.json";
-        var filePath = Path.Combine(_basePath, fileName);
+        string fileName = $"{snapshot.Id:D}.json";
+        string filePath = Path.Combine(_basePath, fileName);
 
-        var json = JsonSerializer.Serialize(snapshot, _jsonOptions);
+        string json = JsonSerializer.Serialize(snapshot, _jsonOptions);
 
         await File.WriteAllTextAsync(filePath, json);
 
@@ -51,8 +51,8 @@ namespace HiveMind.Infrastructure.Persistence
     {
       try
       {
-        var fileName = $"{snapshotId}.json";
-        var filePath = Path.Combine(_basePath, fileName);
+        string fileName = $"{snapshotId}.json";
+        string filePath = Path.Combine(_basePath, fileName);
 
         if (!File.Exists(filePath))
         {
@@ -60,8 +60,8 @@ namespace HiveMind.Infrastructure.Persistence
           return null;
         }
 
-        var json = await File.ReadAllTextAsync(filePath);
-        var snapshot = JsonSerializer.Deserialize<SimulationSnapshot>(json, _jsonOptions);
+        string json = await File.ReadAllTextAsync(filePath);
+        SimulationSnapshot? snapshot = JsonSerializer.Deserialize<SimulationSnapshot>(json, _jsonOptions);
 
         _logger?.LogInformation("Loaded simulation snapshot {SnapshotId} from {FilePath}", snapshotId, filePath);
         return snapshot;
@@ -77,17 +77,16 @@ namespace HiveMind.Infrastructure.Persistence
     {
       try
       {
-        var snapshots = new List<SimulationSnapshot>();
-        var jsonFiles = Directory.GetFiles(_basePath, "*.json");
+        List<SimulationSnapshot> snapshots = [];
+        string[] jsonFiles = Directory.GetFiles(_basePath, "*.json");
 
-        foreach (var filePath in jsonFiles)
+        foreach (string filePath in jsonFiles)
         {
           try
           {
-            var json = await File.ReadAllTextAsync(filePath);
-            var snapshot = JsonSerializer.Deserialize<SimulationSnapshot>(json, _jsonOptions);
-            if (snapshot != null)
-              snapshots.Add(snapshot);
+            string json = await File.ReadAllTextAsync(filePath);
+            SimulationSnapshot? snapshot = JsonSerializer.Deserialize<SimulationSnapshot>(json, _jsonOptions);
+            if (snapshot != null) snapshots.Add(snapshot);
           }
           catch (Exception ex)
           {
@@ -108,8 +107,8 @@ namespace HiveMind.Infrastructure.Persistence
     {
       try
       {
-        var fileName = $"{snapshotId}.json";
-        var filePath = Path.Combine(_basePath, fileName);
+        string fileName = $"{snapshotId}.json";
+        string filePath = Path.Combine(_basePath, fileName);
 
         if (!File.Exists(filePath))
         {
@@ -132,18 +131,18 @@ namespace HiveMind.Infrastructure.Persistence
     {
       try
       {
-        var snapshot = await LoadSnapshotAsync(snapshotId) ?? throw new FileNotFoundException($"Snapshot {snapshotId} not found");
-        var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        var exportFileName = $"hivemind_export_{timestamp}.{format.ToLower()}";
-        var exportPath = Path.Combine(_basePath, "Exports");
+        SimulationSnapshot snapshot = await LoadSnapshotAsync(snapshotId) ?? throw new FileNotFoundException($"Snapshot {snapshotId} not found");
+        string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        string exportFileName = $"hivemind_export_{timestamp}.{format.ToLower()}";
+        string exportPath = Path.Combine(_basePath, "Exports");
 
         Directory.CreateDirectory(exportPath);
-        var exportFilePath = Path.Combine(exportPath, exportFileName);
+        string exportFilePath = Path.Combine(exportPath, exportFileName);
 
         switch (format.ToLower())
         {
           case "json":
-            var json = JsonSerializer.Serialize(snapshot, _jsonOptions);
+            string json = JsonSerializer.Serialize(snapshot, _jsonOptions);
             await File.WriteAllTextAsync(exportFilePath, json);
             break;
           case "csv":
@@ -165,8 +164,8 @@ namespace HiveMind.Infrastructure.Persistence
 
     private static async Task ExportToCsvAsync(SimulationSnapshot snapshot, string filePath)
     {
-      var lines = new List<string>
-      {
+      List<string> lines =
+      [
         "Property,Value",
         $"SnapshotId,{snapshot.Id}",
         $"CreatedAt,{snapshot.CreatedAt:yyyy-MM-dd HH:mm:ss}",
@@ -178,7 +177,7 @@ namespace HiveMind.Infrastructure.Persistence
         "",
         "Statistics Data:",
         snapshot.StatisticsJson
-      };
+      ];
 
       await File.WriteAllLinesAsync(filePath, lines);
     }

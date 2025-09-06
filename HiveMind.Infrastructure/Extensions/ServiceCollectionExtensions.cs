@@ -34,8 +34,8 @@ namespace HiveMind.Infrastructure.Extensions
       // Add persistence services
       services.AddSingleton<ISimulationPersistence>(provider =>
       {
-        var settings = provider.GetService<IOptions<SimulationSettings>>()?.Value ?? new SimulationSettings();
-        var logger = provider.GetService<ILogger<FileSystemPersistence>>();
+        SimulationSettings settings = provider.GetService<IOptions<SimulationSettings>>()?.Value ?? new SimulationSettings();
+        ILogger<FileSystemPersistence>? logger = provider.GetService<ILogger<FileSystemPersistence>>();
 
         var snapshotsPath = !string.IsNullOrEmpty(settings.SnapshotsPath)
           ? settings.SnapshotsPath

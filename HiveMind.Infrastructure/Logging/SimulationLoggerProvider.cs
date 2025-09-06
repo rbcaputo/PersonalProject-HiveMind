@@ -38,8 +38,7 @@ namespace HiveMind.Infrastructure.Logging
     {
       if (!_disposed)
       {
-        lock (_lock)
-          _loggers.Clear();
+        lock (_lock) _loggers.Clear();
 
         _disposed = true;
 

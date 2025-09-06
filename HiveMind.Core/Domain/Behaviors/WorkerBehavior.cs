@@ -36,7 +36,7 @@ namespace HiveMind.Core.Domain.Behaviors
 
     private void AssignNewTask(Ant ant, ISimulationContext context)
     {
-      var random = context.Random.NextDouble();
+      double random = context.Random.NextDouble();
 
       if (random < 0.6) // 60% chance to build/maintain
       {
@@ -59,7 +59,7 @@ namespace HiveMind.Core.Domain.Behaviors
     {
       if (_workTarget.HasValue)
       {
-        var distanceToTarget = ant.Position.DistanceTo(_workTarget.Value);
+        double distanceToTarget = ant.Position.DistanceTo(_workTarget.Value);
 
         if (distanceToTarget > 1.0)
           ant.MoveTo(_workTarget.Value);
@@ -93,12 +93,12 @@ namespace HiveMind.Core.Domain.Behaviors
 
     private static Position GetRandomPositionNearNest(Ant ant, ISimulationContext context, double radius)
     {
-      var nestPosition = ant.Colony.CenterPosition;
-      var angle = context.Random.NextDouble() * 2 * Math.PI;
-      var distance = context.Random.NextDouble() * radius;
+      Position nestPosition = ant.Colony.CenterPosition;
+      double angle = context.Random.NextDouble() * 2 * Math.PI;
+      double distance = context.Random.NextDouble() * radius;
 
-      var x = nestPosition.X + Math.Cos(angle) * distance;
-      var y = nestPosition.Y + Math.Sin(angle) * distance;
+      double x = nestPosition.X + Math.Cos(angle) * distance;
+      double y = nestPosition.Y + Math.Sin(angle) * distance;
 
       return new(x, y);
     }

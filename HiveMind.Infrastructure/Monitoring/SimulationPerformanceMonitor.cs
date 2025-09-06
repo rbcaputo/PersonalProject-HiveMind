@@ -27,27 +27,20 @@ namespace HiveMind.Infrastructure.Monitoring
         _tickTimes.Enqueue(milliseconds);
         _totalTicks++;
 
-        if (_tickTimes.Count > 1000)
-          _tickTimes.Dequeue();
-
-        if (milliseconds < _minTickTime)
-          _minTickTime = milliseconds;
-        if (milliseconds > _maxTickTime)
-          _maxTickTime = milliseconds;
+        if (_tickTimes.Count > 1000) _tickTimes.Dequeue();
+        if (milliseconds < _minTickTime) _minTickTime = milliseconds;
+        if (milliseconds > _maxTickTime) _maxTickTime = milliseconds;
 
         // Log performance warnings
-        if (milliseconds > 100) // Tick took longer than 100ms
-          _logger?.LogWarning("Slow tick detected: {TickTime:F2}ms", milliseconds);
+        if (milliseconds > 100) _logger?.LogWarning("Slow tick detected: {TickTime:F2}ms", milliseconds); // Tick took longer than 100ms
       }
     }
 
     public void RecordMemoryUsage(long bytes)
     {
       lock (_lock)
-      {
         if (bytes > _peakMemoryUsage)
           _peakMemoryUsage = bytes;
-      }
     }
 
     public void RecordPopulation(int count)
@@ -67,7 +60,7 @@ namespace HiveMind.Infrastructure.Monitoring
         if (_tickTimes.Count == 0)
           return 0;
 
-        var samplesToTake = Math.Min(sampleSize, _tickTimes.Count);
+        int samplesToTake = Math.Min(sampleSize, _tickTimes.Count);
         return _tickTimes.TakeLast(samplesToTake).Average();
       }
     }
@@ -79,7 +72,7 @@ namespace HiveMind.Infrastructure.Monitoring
     {
       lock (_lock)
       {
-        return new PerformanceStatistics
+        return new()
         {
           AverageTickTime = GetAverageTickTime(),
           MinTickTime = _minTickTime == double.MaxValue ? 0 : _minTickTime,
@@ -97,7 +90,7 @@ namespace HiveMind.Infrastructure.Monitoring
 
     public void Reset()
     {
-      lock ( _lock)
+      lock (_lock)
       {
         _tickTimes.Clear();
         _totalTicks = 0;

@@ -15,10 +15,9 @@ namespace HiveMind.Infrastructure.Logging
 
     public override string ToString()
     {
-      var result = $"[{Timestamp:yyyy-MM-dd HH:mm:ss}] [{Level}] {CategoryName}: {Message}";
+      string result = $"[{Timestamp:yyyy-MM-dd HH:mm:ss}] [{Level}] {CategoryName}: {Message}";
 
-      if (Exception != null)
-        result += $"\nException: {Exception.Message}";
+      if (Exception != null) result += $"\nException: {Exception.Message}";
 
       return result;
     }

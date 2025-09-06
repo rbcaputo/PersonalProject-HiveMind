@@ -59,7 +59,7 @@ namespace HiveMind.Core.Domain.Behaviors
 
       if (_patrolTarget != null)
       {
-        var distanceToTarget = ant.Position.DistanceTo(_patrolTarget.Value);
+        double distanceToTarget = ant.Position.DistanceTo(_patrolTarget.Value);
         if (distanceToTarget > 1.5)
         {
           ant.SetState(ActivityState.Moving);
@@ -78,12 +78,12 @@ namespace HiveMind.Core.Domain.Behaviors
     private void AssignPatrolTarget(Ant ant, ISimulationContext context)
     {
       // Create patrol route around colony perimeter
-      var nestPosition = ant.Colony.CenterPosition;
-      var angle = context.Random.NextDouble() * 2 * Math.PI;
-      var distance = _patrolRadius * (0.8 + context.Random.NextDouble() * 0.4); // 80% - 120% of patrol radius
+      Position nestPosition = ant.Colony.CenterPosition;
+      double angle = context.Random.NextDouble() * 2 * Math.PI;
+      double distance = _patrolRadius * (0.8 + context.Random.NextDouble() * 0.4); // 80% - 120% of patrol radius
 
-      var x = nestPosition.X + Math.Cos(angle) * distance;
-      var y = nestPosition.Y + Math.Sin(angle) * distance;
+      double x = nestPosition.X + Math.Cos(angle) * distance;
+      double y = nestPosition.Y + Math.Sin(angle) * distance;
 
       _patrolTarget = new Position(x, y);
     }

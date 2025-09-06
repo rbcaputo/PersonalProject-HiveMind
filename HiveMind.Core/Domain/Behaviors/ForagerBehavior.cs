@@ -79,12 +79,19 @@ namespace HiveMind.Core.Domain.Behaviors
 
     private void SearchForFood(Ant ant, ISimulationContext context)
     {
-      // Look for nearby food sources
-      var foodSources = context.Environment.GetFoodSources()
-        .Where(fs => !fs.IsExhausted && fs.Position.DistanceTo(ant.Position) <= _forageRadius)
-        .OrderBy(fs => fs.Position.DistanceTo(ant.Position));
+      var antPosition = ant.Position;
+      var foodSourcesWithDistance = new List<(IFoodSource source, double distance)>();
 
-      _targetFoodSource = foodSources.FirstOrDefault();
+      // Single pass to calculate distances and filter
+      foreach (var fs in context.Environment.GetFoodSources())
+        if (!fs.IsExhausted)
+        {
+          var distance = fs.Position.DistanceTo(antPosition);
+          if (distance <= _forageRadius) foodSourcesWithDistance.Add((fs, distance));
+        }
+
+      // Find closest food source from pre-calculated distances
+      _targetFoodSource = foodSourcesWithDistance.OrderBy(item => item.distance).FirstOrDefault().source;
       if (_targetFoodSource != null)
       {
         ant.SetState(ActivityState.Moving);

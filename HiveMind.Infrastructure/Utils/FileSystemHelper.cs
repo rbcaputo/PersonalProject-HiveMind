@@ -10,7 +10,7 @@
     /// </summary>
     public static string GetDefaultDataDirectory()
     {
-      var appDataPath = System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData);
+      string appDataPath = System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData);
       return Path.Combine(appDataPath, "HiveMind");
     }
 
@@ -31,8 +31,7 @@
     /// </summary>
     public static void EnsureDirectoryExists(string path)
     {
-      if (!Directory.Exists(path))
-        Directory.CreateDirectory(path);
+      if (!Directory.Exists(path)) Directory.CreateDirectory(path);
     }
 
     /// <summary>
@@ -40,14 +39,12 @@
     /// </summary>
     public static string GetSafeFileName(string fileName)
     {
-      var invalidChars = Path.GetInvalidFileNameChars();
-      var safeName = string.Join("_", fileName.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries));
+      char[] invalidChars = Path.GetInvalidFileNameChars();
+      string safeName = string.Join("_", fileName.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries));
 
       // Limit length and ensure it's not empty
-      if (string.IsNullOrWhiteSpace(safeName))
-        safeName = "unnamed";
-      else if (safeName.Length > 100)
-        safeName = safeName[..100];
+      if (string.IsNullOrWhiteSpace(safeName)) safeName = "unnamed";
+      else if (safeName.Length > 100) safeName = safeName[..100];
 
       return safeName;
     }
@@ -59,7 +56,7 @@
     {
       try
       {
-        var drive = new DriveInfo(Path.GetPathRoot(path) ?? "C:");
+        DriveInfo drive = new(Path.GetPathRoot(path) ?? "C:");
         return drive.AvailableFreeSpace;
       }
       catch
@@ -75,16 +72,14 @@
     {
       try
       {
-        if (!Directory.Exists(directory))
-          return;
+        if (!Directory.Exists(directory)) return;
 
-        var files = Directory.GetFiles(directory, searchPattern)
+        List<FileInfo> files = [.. Directory.GetFiles(directory, searchPattern)
           .Select(f => new FileInfo(f))
-          .OrderByDescending(fi => fi.LastWriteTime)
-          .ToList();
+          .OrderByDescending(fi => fi.LastWriteTime)];
 
-        var filesToDelete = files.Skip(keepCount);
-        foreach (var file in filesToDelete)
+        IEnumerable<FileInfo> filesToDelete = files.Skip(keepCount);
+        foreach (FileInfo file in filesToDelete)
         {
           try
           {

@@ -8,13 +8,25 @@
     public double X { get; } = x;
     public double Y { get; } = y;
 
-    public double DistanceTo(Position other) =>
-      Math.Sqrt(Math.Pow(X - other.X, 2) + Math.Pow(Y - other.Y, 2));
+    // Distance calculation
+    public double DistanceTo(Position other)
+    {
+      double deltaX = X - other.X;
+      double deltaY = Y - other.Y;
 
-    public Position MoveTo(double deltaX, double deltaY) =>
-      new(X + deltaX, Y + deltaY);
+      return Math.Sqrt(deltaX * deltaX + deltaY * deltaY); // Faster than Math.Pow
+    }
 
-    public override string ToString() =>
-      $"({X:F2}, {Y:F2})";
+    public double SquaredDistanceTo(Position other)
+    {
+      double deltaX = X - other.X;
+      double deltaY = Y - other.Y;
+
+      return deltaX * deltaX + deltaY * deltaY; // Faster for comparisons
+    }
+
+    public Position MoveTo(double deltaX, double deltaY) => new(X + deltaX, Y + deltaY);
+
+    public override string ToString() => $"({X:F2}, {Y:F2})";
   }
 }

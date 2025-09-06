@@ -1,4 +1,5 @@
-﻿using HiveMind.Core.Domain.Entities;
+﻿using HiveMind.Core.Domain.Common;
+using HiveMind.Core.Domain.Entities;
 using HiveMind.Core.Domain.Enums;
 using HiveMind.Core.Domain.Interfaces;
 
@@ -32,10 +33,10 @@ namespace HiveMind.Core.Domain.Behaviors
         // Idle behavior - minimal movement
         if (context.Random.NextDouble() < 0.05) // 5% chance to move slightly
         {
-          var currentPos = ant.Position;
-          var newX = currentPos.X + (context.Random.NextDouble() - 0.5) * 2;
-          var newY = currentPos.Y + (context.Random.NextDouble() - 0.5) * 2;
-          ant.MoveTo(new Common.Position(newX, newY));
+          Position currentPos = ant.Position;
+          double newX = currentPos.X + (context.Random.NextDouble() - 0.5) * 2;
+          double newY = currentPos.Y + (context.Random.NextDouble() - 0.5) * 2;
+          ant.MoveTo(new Position(newX, newY));
         }
         else
           ant.SetState(ActivityState.Idle);

@@ -78,7 +78,7 @@ namespace HiveMind.Core.Domain.Entities
     {
       if (!IsAlive) return;
 
-      var previousEnergy = Energy;
+      double previousEnergy = Energy;
       Energy = Math.Max(0, Energy - amount);
 
       // If energy hits zero, start tracking starvation
@@ -119,7 +119,7 @@ namespace HiveMind.Core.Domain.Entities
 
           // Set starving state for behavior awareness
           // Force rest when starving
-          if (CurrentState != ActivityState.Dead) CurrentState = ActivityState.Resting; 
+          if (CurrentState != ActivityState.Dead) CurrentState = ActivityState.Resting;
         }
       }
       else if (Energy < MaxEnergy * 0.1) // Very low energy (below 10%)
@@ -127,7 +127,7 @@ namespace HiveMind.Core.Domain.Entities
         // Gradual health degradation from very low energy
         if (Health > 0)
         {
-          var healthLoss = 0.1 * (1.0 - Energy / (MaxEnergy * 0.1)); // More damage the lower the energy
+          double healthLoss = 0.1 * (1.0 - Energy / (MaxEnergy * 0.1)); // More damage the lower the energy
           Health = Math.Max(0, Health - healthLoss);
         }
       }
@@ -138,7 +138,7 @@ namespace HiveMind.Core.Domain.Entities
 
     public double DropFood()
     {
-      var dropped = CarriedFood;
+      double dropped = CarriedFood;
       CarriedFood = 0;
       return dropped;
     }
@@ -181,8 +181,8 @@ namespace HiveMind.Core.Domain.Entities
     {
       if (CurrentState != ActivityState.Moving || Position.Equals(_targetPosition)) return;
 
-      var distance = Position.DistanceTo(_targetPosition);
-      var moveDistance = Speed * context.DeltaTime;
+      double distance = Position.DistanceTo(_targetPosition);
+      double moveDistance = Speed * context.DeltaTime;
 
       if (distance <= moveDistance)
       {
@@ -191,16 +191,16 @@ namespace HiveMind.Core.Domain.Entities
       }
       else
       {
-        var ratio = moveDistance / distance;
-        var deltaX = (_targetPosition.X - Position.X) * ratio;
-        var deltaY = (_targetPosition.Y - Position.Y) * ratio;
+        double ratio = moveDistance / distance;
+        double deltaX = (_targetPosition.X - Position.X) * ratio;
+        double deltaY = (_targetPosition.Y - Position.Y) * ratio;
         Position = Position.MoveTo(deltaX, deltaY);
       }
     }
 
     private void CheckVitals()
     {
-      var maxAge = GetMaxAge();
+      int maxAge = GetMaxAge();
 
       if (Health <= 0 || Age > maxAge)
       {
@@ -213,8 +213,8 @@ namespace HiveMind.Core.Domain.Entities
       // Extreme old age causes gradual health decline
       if (Age > maxAge * 0.8) // After 80% of max age
       {
-        var agingFactor = (double)(Age - maxAge * 0.8) / (maxAge * 0.2);
-        var agingDamage = 0.05 * agingFactor; // Gradual aging damage
+        double agingFactor = (double)(Age - maxAge * 0.8) / (maxAge * 0.2);
+        double agingDamage = 0.05 * agingFactor; // Gradual aging damage
         Health = Math.Max(Health, Health - agingDamage);
       }
     }

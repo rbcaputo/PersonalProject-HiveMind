@@ -8,35 +8,40 @@ namespace HiveMind.Core.Domain.Entities
   /// <summary>
   /// Represents an ant colony with its members and collective behaviors
   /// </summary>
-  public class AntColony : BaseEntity, IColony
+  public class AntColony(Position centerPosition, int maxPopulation = 500) : BaseEntity, IColony
   {
-    private readonly Dictionary<Guid, Ant> _members;
-    private readonly List<Position> _nestLocations;
+    private readonly Dictionary<Guid, Ant> _members = [];
+    private readonly List<Position> _nestLocations = [centerPosition];
+    private readonly Dictionary<AntRole, List<Ant>> _roleCache = [];
+    private long _lastCacheUpdate = -1;
+    private bool _isInitialized = false;
 
     public InsectType ColonyType => InsectType.Ant;
-    public Position CenterPosition { get; private set; }
+    public Position CenterPosition { get; private set; } = centerPosition;
     public IReadOnlyCollection<IInsect> Members => [.. _members.Values.Cast<IInsect>()];
     public int Population => _members.Count(kv => kv.Value.IsAlive);
-    public double TotalFoodStored { get; private set; }
+    public double TotalFoodStored { get; private set; } = 100.0; // Starting food
     public bool IsActive => Population > 0 && HasQueen;
     public bool HasQueen => _members.Values.Any(ant => ant.Role == AntRole.Queen && ant.IsAlive);
 
     // Colony-specific properties
-    public int MaxPopulation { get; private set; }
-    public double ExpansionRadius { get; private set; }
+    public int MaxPopulation { get; private set; } = maxPopulation;
+    public double ExpansionRadius { get; private set; } = 50.0;
     public IReadOnlyCollection<Position> NestLocations => _nestLocations.AsReadOnly();
 
-    public AntColony(Position centerPosition, int maxPopulation = 500)
+    public void Initialize(ISimulationContext context)
     {
-      _members = [];
-      _nestLocations = [centerPosition];
-      CenterPosition = centerPosition;
-      MaxPopulation = maxPopulation;
-      ExpansionRadius = 50.0;
-      TotalFoodStored = 100.0; // Starting food
+      if (_isInitialized) throw new InvalidOperationException("Colony has already been initialized");
+      ArgumentNullException.ThrowIfNull(context);
 
-      InitializeColony();
+      InitializeColony(context);
+      _isInitialized = true;
     }
+
+    /// <summary>
+    /// Checks if colony is properly initialized before operations
+    /// </summary>
+    public bool IsInitialized => _isInitialized;
 
     public void AddMember(IInsect insect)
     {
@@ -47,10 +52,35 @@ namespace HiveMind.Core.Domain.Entities
       }
     }
 
+    public IEnumerable<Ant> GetAntsByRole(AntRole role)
+    {
+      // Update cache only when needed
+      if (_lastCacheUpdate < LastUpdatedAt.Ticks)
+      {
+        RefreshRoleCache();
+        _lastCacheUpdate = LastUpdatedAt.Ticks;
+      }
+
+      return _roleCache.TryGetValue(role, out var ants) ? ants : Enumerable.Empty<Ant>();
+    }
+
+    public void RefreshRoleCache()
+    {
+      _roleCache.Clear();
+
+      foreach (var ant in _members.Values.Where(a => a.IsAlive))
+      {
+        if (!_roleCache.ContainsKey(ant.Role)) _roleCache[ant.Role] = [];
+
+        _roleCache[ant.Role].Add(ant);
+      }
+
+
+    }
+
     public void RemoveMember(Guid insectId)
     {
-      if (!_members.ContainsKey(insectId))
-        return;
+      if (!_members.ContainsKey(insectId)) return;
 
       _members.Remove(insectId);
       UpdateTimestamp();
@@ -58,31 +88,34 @@ namespace HiveMind.Core.Domain.Entities
 
     public void Update(ISimulationContext context)
     {
-      if (!IsActive)
-        return;
+      if (!_isInitialized) throw new InvalidOperationException("Colony must be initialized before updating");
+      if (!IsActive) return;
 
-      // Update all colony members
-      var membersToUpdate = _members.Values.Where(ant => ant.IsAlive).ToList();
-      foreach (var ant in membersToUpdate)
+      // Single-pass update with combined operations
+      List<Guid> deadAnts = [];
+
+      foreach (Ant ant in _members.Values)
       {
-        ant.Update(context);
-
-        // Collect food from returning foragers
-        if (ant.Role == AntRole.Forager && ant.CarriedFood > 0)
+        if (ant.IsAlive)
         {
-          var distanceToNest = ant.Position.DistanceTo(CenterPosition);
-          if (distanceToNest < 2.0)
+          ant.Update(context);
+
+          // Handle food collection inline
+          if (ant.Role == AntRole.Forager && ant.CarriedFood > 0)
           {
-            var droppedFood = ant.DropFood();
-            TotalFoodStored += droppedFood;
+            double distanceToNest = ant.Position.DistanceTo(CenterPosition);
+            if (distanceToNest < 2.0)
+            {
+              var droppedFood = ant.DropFood();
+              TotalFoodStored += droppedFood;
+            }
           }
         }
+        else deadAnts.Add(ant.Id); // Collect dead ants for removal
       }
 
-      // Remove dead ants
-      var deadAntIds = _members.Where(kv => !kv.Value.IsAlive).Select(kv => kv.Key).ToList();
-      foreach (var deadAntId in deadAntIds)
-        _members.Remove(deadAntId);
+      // Remove dead ants in single operation
+      foreach (Guid deadAntId in deadAnts) _members.Remove(deadAntId);
 
       // Colony-level behaviors
       ManagePopulation(context);
@@ -106,54 +139,48 @@ namespace HiveMind.Core.Domain.Entities
       return false;
     }
 
-    public IEnumerable<Ant> GetAntsByRole(AntRole role) =>
-      _members.Values.Where(ant => ant.Role == role && ant.IsAlive);
-
     public Position GetNearestNest(Position position) =>
       _nestLocations.OrderBy(nest => nest.DistanceTo(position)).First();
 
-    private void InitializeColony()
+    private void InitializeColony(ISimulationContext context)
     {
       // Create queen
-      var queen = new Ant(AntRole.Queen, CenterPosition, AntBehaviorFactory.CreateBehavior(AntRole.Queen), this);
+      Ant queen = new(AntRole.Queen, CenterPosition, AntBehaviorFactory.CreateBehavior(AntRole.Queen), this);
       AddMember(queen);
 
       // Create initial workers
       for (int i = 0; i < 10; i++)
       {
-        var position = GetRandomPositionNearCenter(5.0);
-        var worker = new Ant(AntRole.Worker, position, AntBehaviorFactory.CreateBehavior(AntRole.Worker), this);
+        Position position = GetRandomPositionNearCenter(5.0, context);
+        Ant worker = new(AntRole.Worker, position, AntBehaviorFactory.CreateBehavior(AntRole.Worker), this);
         AddMember(worker);
       }
 
       // Create initial foragers
       for (int i = 0; i < 5; i++)
       {
-        var position = GetRandomPositionNearCenter(3.0);
-        var forager = new Ant(AntRole.Forager, position, AntBehaviorFactory.CreateBehavior(AntRole.Forager), this);
+        Position position = GetRandomPositionNearCenter(3.0, context);
+        Ant forager = new(AntRole.Forager, position, AntBehaviorFactory.CreateBehavior(AntRole.Forager), this);
         AddMember(forager);
       }
     }
 
     private void ManagePopulation(ISimulationContext context)
     {
-      if (!HasQueen || Population >= MaxPopulation)
-        return;
+      if (!HasQueen || Population >= MaxPopulation) return;
 
       // Simple reproduction logic - queen spawns new ants periodically
-      if (context.CurrentTick % 100 == 0 && TotalFoodStored > 50)
-        SpawnNewAnt();
+      if (context.CurrentTick % 100 == 0 && TotalFoodStored > 50) SpawnNewAnt(context);
     }
 
     private void ManageFood()
     {
       // Colony consumes food over time
-      var consumptionRate = Population * 0.05;
+      double consumptionRate = Population * 0.05;
       TotalFoodStored = Math.Max(0, TotalFoodStored - consumptionRate);
 
       // If food is low, send more foragers
-      if (TotalFoodStored < Population * 2)
-        DispatchForagers();
+      if (TotalFoodStored < Population * 2) DispatchForagers();
     }
 
     private void ExpandTerritory(ISimulationContext context)
@@ -161,17 +188,17 @@ namespace HiveMind.Core.Domain.Entities
       // Simple territory expansion when population grows
       if (Population > _nestLocations.Count * 50 && context.CurrentTick % 500 == 0)
       {
-        var newNestPosition = GetRandomPositionNearCenter(ExpansionRadius);
+        Position newNestPosition = GetRandomPositionNearCenter(ExpansionRadius);
         _nestLocations.Add(newNestPosition);
       }
     }
 
-    private void SpawnNewAnt()
+    private void SpawnNewAnt(ISimulationContext context)
     {
-      var role = DetermineNewAntRole();
-      var position = GetRandomPositionNearCenter(2.0);
+      AntRole role = DetermineNewAntRole();
+      Position position = GetRandomPositionNearCenter(2.0, context);
 
-      var newAnt = new Ant(role, position, AntBehaviorFactory.CreateBehavior(role), this);
+      Ant newAnt = new(role, position, AntBehaviorFactory.CreateBehavior(role), this);
       AddMember(newAnt);
 
       // Consume food for reproduction
@@ -180,21 +207,19 @@ namespace HiveMind.Core.Domain.Entities
 
     private AntRole DetermineNewAntRole()
     {
-      var foragerCount = GetAntsByRole(AntRole.Forager).Count();
-      var soldierCount = GetAntsByRole(AntRole.Soldier).Count();
+      int foragerCount = GetAntsByRole(AntRole.Forager).Count();
+      int soldierCount = GetAntsByRole(AntRole.Soldier).Count();
 
       // Simple role distribution logic
-      if (foragerCount < Population * 0.3)
-        return AntRole.Forager;
-      if (soldierCount < Population * 0.1)
-        return AntRole.Soldier;
+      if (foragerCount < Population * 0.3) return AntRole.Forager;
+      if (soldierCount < Population * 0.1) return AntRole.Soldier;
 
       return AntRole.Worker;
     }
 
     private void DispatchForagers()
     {
-      var idleForagers = GetAntsByRole(AntRole.Forager)
+      IEnumerable<Ant> idleForagers = GetAntsByRole(AntRole.Forager)
         .Where(ant => ant.CurrentState == ActivityState.Idle)
         .Take(3);
 
@@ -204,12 +229,12 @@ namespace HiveMind.Core.Domain.Entities
 
     private Position GetRandomPositionNearCenter(double radius, ISimulationContext? context = null)
     {
-      var random = context?.Random ?? new Random();
-      var angle = random.NextDouble() * 2 * Math.PI;
-      var distance = random.NextDouble() * radius;
+      Random random = context?.Random ?? new Random();
+      double angle = random.NextDouble() * 2 * Math.PI;
+      double distance = random.NextDouble() * radius;
 
-      var x = CenterPosition.X + Math.Cos(angle) * distance;
-      var y = CenterPosition.Y + Math.Sin(angle) * distance;
+      double x = CenterPosition.X + Math.Cos(angle) * distance;
+      double y = CenterPosition.Y + Math.Sin(angle) * distance;
 
       return new(x, y);
     }

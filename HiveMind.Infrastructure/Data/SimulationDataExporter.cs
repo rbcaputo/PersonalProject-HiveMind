@@ -26,8 +26,8 @@ namespace HiveMind.Infrastructure.Data
     {
       try
       {
-        var csv = new StringBuilder();
-        var statsArray = statistics.ToArray();
+        StringBuilder csv = new();
+        object[] statsArray = [.. statistics];
 
         if (statsArray.Length == 0)
         {
@@ -39,14 +39,14 @@ namespace HiveMind.Infrastructure.Data
         // Assuming statistics are SimulationStatistics objects
         csv.AppendLine("Tick,Population,ActiveColonies,TotalFood,AvgEnergy,Deaths,Births");
 
-        foreach (var stat in statsArray)
+        foreach (object stat in statsArray)
         {
-          var json = JsonSerializer.Serialize(stat, _jsonOptions);
-          var statDict = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+          string json = JsonSerializer.Serialize(stat, _jsonOptions);
+          Dictionary<string, object>? statDict = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
 
           if (statDict != null)
           {
-            var line = $"{statDict.GetValueOrDefault("currentTick", 0)}," +
+            string line = $"{statDict.GetValueOrDefault("currentTick", 0)}," +
               $"{statDict.GetValueOrDefault("totalPopulation", 0)}," +
               $"{statDict.GetValueOrDefault("activeColonies", 0)}," +
               $"{statDict.GetValueOrDefault("totalFoodStored", 0)}," +
@@ -73,7 +73,7 @@ namespace HiveMind.Infrastructure.Data
     {
       try
       {
-        var json = JsonSerializer.Serialize(colonyData, _jsonOptions);
+        string json = JsonSerializer.Serialize(colonyData, _jsonOptions);
         await File.WriteAllTextAsync(filePath, json);
 
         _logger?.LogInformation("Exported colony data to JSON: {FilePath}", filePath);
@@ -106,7 +106,7 @@ namespace HiveMind.Infrastructure.Data
 
     private static async Task<string> ExportPopulationToCsvAsync(string filePath)
     {
-      var csv = new StringBuilder();
+      StringBuilder csv = new();
       csv.AppendLine("Role,Count,AvgEnergy,AvgAge");
 
       // This would need to be implemented based on the actual structure of populationData

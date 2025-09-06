@@ -20,7 +20,7 @@ namespace HiveMind.Infrastructure.Environment
       if (IsExhausted || amount <= 0)
         return 0;
 
-      var harvestedAmount = Math.Min(amount, AvailableFood);
+      double harvestedAmount = Math.Min(amount, AvailableFood);
       AvailableFood -= harvestedAmount;
 
       return harvestedAmount;

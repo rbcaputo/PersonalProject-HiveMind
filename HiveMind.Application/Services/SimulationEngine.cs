@@ -66,8 +66,11 @@ namespace HiveMind.Application.Services
       _context = new SimulationContext(_environment, _configuration.DeltaTime, _configuration.RandomSeed);
 
       // Create initial colony
-      var colony = new AntColony(_configuration.ColonyPosition, _configuration.MaxColonyPopulation);
+      AntColony colony = new(_configuration.ColonyPosition, _configuration.MaxColonyPopulation);
       _colonies.Add(colony);
+      colony.Initialize(_context);
+
+      ValidateColoniesInitialized();
 
       // Reset counters
       _currentTick = 0;
@@ -79,8 +82,8 @@ namespace HiveMind.Application.Services
       _antLifeTracker.Clear();
 
       // Initialize tracking with starting population
-      var allAnts = _colonies.SelectMany(c => c.Members).OfType<Ant>();
-      foreach (var ant in allAnts)
+      IEnumerable<Ant> allAnts = _colonies.SelectMany(c => c.Members).OfType<Ant>();
+      foreach (Ant ant in allAnts)
       {
         if (ant.IsAlive)
         {
@@ -96,6 +99,16 @@ namespace HiveMind.Application.Services
       return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Validate all colonies are initialized before starting
+    /// </summary>
+    private void ValidateColoniesInitialized()
+    {
+      List<AntColony> uninitializedColonies = [.. _colonies.OfType<AntColony>().Where(c => !c.IsInitialized)];
+      if (uninitializedColonies.Count != 0) throw new InvalidOperationException($"Found {uninitializedColonies.Count} uninitialized colonies. " +
+        "All colonies must be initialized before starting simulation.");
+    }
+
     public Task StartAsync()
     {
       if (_state != SimulationState.Initialized && _state != SimulationState.Paused)
@@ -104,7 +117,7 @@ namespace HiveMind.Application.Services
       if (_configuration == null)
         throw new InvalidOperationException("Simulation not properly initialized");
 
-      var intervalMs = (int)(1000.0 / _configuration.TargetTPS);
+      int intervalMs = (int)(1000.0 / _configuration.TargetTPS);
       _simulationTimer.Change(0, intervalMs);
       _simulationStartTime = DateTime.UtcNow;
       _performanceTimer.Start();
@@ -131,8 +144,7 @@ namespace HiveMind.Application.Services
 
     public async Task StopAsync()
     {
-      if (_state == SimulationState.Uninitialized || _state == SimulationState.Stopped)
-        return;
+      if (_state == SimulationState.Uninitialized || _state == SimulationState.Stopped) return;
 
       // Stop the timer
       _simulationTimer.Change(Timeout.Infinite, Timeout.Infinite);
@@ -158,8 +170,7 @@ namespace HiveMind.Application.Services
 
     private void SimulationTimerCallback(object? state)
     {
-      if (_disposed || _state != SimulationState.Running)
-        return;
+      if (_disposed || _state != SimulationState.Running) return;
 
       try
       {
@@ -181,14 +192,14 @@ namespace HiveMind.Application.Services
       if (_context == null || _configuration == null)
         throw new InvalidOperationException("Simulation not properly initialized");
 
-      var stepWatch = Stopwatch.StartNew();
+      Stopwatch stepWatch = Stopwatch.StartNew();
 
       // Update simulation context
       ((SimulationContext)_context).UpdateTick(_currentTick);
 
       // Update all colonies
-      var activeColonies = _colonies.Where(c => c.IsActive).ToList();
-      foreach (var colony in activeColonies) colony.Update(_context);
+      List<IColony> activeColonies = [.. _colonies.Where(c => c.IsActive)];
+      foreach (IColony colony in activeColonies) colony.Update(_context);
 
       // Remove inactive colonies
       _colonies.RemoveAll(c => !c.IsActive);
@@ -203,7 +214,7 @@ namespace HiveMind.Application.Services
       stepWatch.Stop();
 
       // Generate statistics
-      var statistics = GenerateStatistics();
+      SimulationStatistics statistics = GenerateStatistics();
 
       // Fire tick event
       Tick?.Invoke(this, new SimulationTickEventArgs(_currentTick, _configuration.DeltaTime, statistics));
@@ -219,62 +230,86 @@ namespace HiveMind.Application.Services
 
     private void UpdateBirthDeathStatistics()
     {
-      var allAnts = _colonies.SelectMany(c => c.Members).OfType<Ant>().ToList();
-      var currentAliveAnts = new HashSet<Guid>();
+      HashSet<Guid> currentAliveCounts = [];
+      HashSet<Guid> currentAntIds = [];
 
-      // Check current status of all ants
-      foreach (var ant in allAnts)
-      {
-        if (ant.IsAlive)
-        {
-          currentAliveAnts.Add(ant.Id);
+      // Single iteration through all ants
+      foreach (IColony colony in _colonies)
+        foreach (IInsect member in colony.Members)
+          if (member is Ant ant)
+          {
+            currentAntIds.Add(ant.Id);
 
-          // If this ant wasn't tracked before, it's a birth
-          if (!_antLifeTracker.ContainsKey(ant.Id))
-          {
-            _antLifeTracker[ant.Id] = true;
-            _totalBirthCount++;
+            if (ant.IsAlive)
+            {
+              currentAliveCounts.Add(ant.Id);
+
+              // If this ant wasn't tracked before, it's a birth
+              if (!_antLifeTracker.ContainsKey(ant.Id))
+              {
+                _antLifeTracker[ant.Id] = true;
+                _totalBirthCount++;
+              }
+            }
+            else
+            {
+              // If this ant was alive last tick but is dead now, it's a death
+              if (_antLifeTracker.TryGetValue(ant.Id, out bool wasAlive) && wasAlive)
+              {
+                _antLifeTracker[ant.Id] = false;
+                _totalDeathCount++;
+              }
+            }
           }
-        }
-        else
-        {
-          // If this ant was alive last tick but is dead now, it's a death
-          if (_antLifeTracker.TryGetValue(ant.Id, out var wasAlive) && wasAlive)
-          {
-            _antLifeTracker[ant.Id] = false;
-            _totalDeathCount++;
-          }
-        }
-      }
 
       // Clean up tracking for ants that no longer exist (were removed from colonies)
-      var antsToRemove = _antLifeTracker.Keys.Except([.. allAnts.Select(a => a.Id)]);
-      foreach (var antId in antsToRemove)
-      {
-        if (_antLifeTracker[antId]) _totalDeathCount++; // Was alive, now gone = death
+      List<Guid> antsToRemove = [];
+      foreach (Guid trackedAntId in _antLifeTracker.Keys)
+        if (!currentAntIds.Contains(trackedAntId))
+        {
+          if (_antLifeTracker[trackedAntId]) _totalDeathCount++; // Was alive, now gone = death
 
-        _antLifeTracker.Remove(antId);
-      }
+          antsToRemove.Add(trackedAntId);
+        }
 
-      _lastTickPopulation = currentAliveAnts.Count;
+      // Remove in separate loop to avoid modification during iteration
+      foreach (Guid antId in antsToRemove) _antLifeTracker.Remove(antId);
+
+      _lastTickPopulation = currentAliveCounts.Count;
     }
 
     private SimulationStatistics GenerateStatistics()
     {
-      var allAnts = _colonies.SelectMany(c => c.Members).OfType<Ant>().ToList();
-      var aliveAnts = allAnts.Where(a => a.IsAlive).ToList();
+      // Single-pass statistics collection
+      int totalPopulation = 0;
+      double totalEnergy = 0.0;
+      Dictionary<string, int> populationByRole = [];
+
+      // Single iteration through all ants
+      foreach (IColony colony in _colonies)
+        foreach (IInsect member in colony.Members)
+        {
+          if (member is Ant ant && ant.IsAlive)
+          {
+            totalPopulation++;
+            totalEnergy += ant.Energy;
+
+            // Update role counts
+            string roleKey = ant.Role.ToString();
+            populationByRole[roleKey] = populationByRole.GetValueOrDefault(roleKey, 0) + 1;
+          }
+        }
 
       return new SimulationStatistics
       {
         CurrentTick = _currentTick,
-        TotalPopulation = aliveAnts.Count,
+        TotalPopulation = totalPopulation,
         ActiveColonies = _colonies.Count(c => c.IsActive),
         TotalFoodStored = _colonies.Sum(c => c.TotalFoodStored),
-        AvgEnergyLevel = aliveAnts.Count != 0 ? aliveAnts.Average(a => a.Energy) : 0,
+        AvgEnergyLevel = totalPopulation > 0 ? totalEnergy / totalPopulation : 0,
         BirthCount = _totalBirthCount,
         DeathCount = _totalDeathCount,
-        PopulationByRole = aliveAnts.GroupBy(a => a.Role.ToString())
-          .ToDictionary(g => g.Key, g => g.Count()),
+        PopulationByRole = populationByRole,
         SimulationTimeElapsed = _performanceTimer.Elapsed.TotalSeconds
       };
     }
@@ -283,7 +318,7 @@ namespace HiveMind.Application.Services
     {
       if (_state != newState)
       {
-        var previousState = _state;
+        SimulationState previousState = _state;
         _state = newState;
         StateChanged?.Invoke(this, new SimulationStateChangedEventArgs(previousState, newState));
       }
