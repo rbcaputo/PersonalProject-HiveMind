@@ -18,6 +18,9 @@ namespace HiveMind.Infrastructure.Environment
 
     public SimulationEnvironment(double width, double height, int initialFoodSources = 10, int? randomSeed = null)
     {
+      ValidateEnvironmentDimensions(width, height);
+      ValidateInitialFoodSources(initialFoodSources);
+
       Width = width;
       Height = height;
       _foodSources = [];
@@ -26,15 +29,39 @@ namespace HiveMind.Infrastructure.Environment
       _temperatureMap = new double[_mapResolution, _mapResolution];
       _foodMap = new double[_mapResolution, _mapResolution];
 
-      // Use seeded Random for initialization to ensure reproducibility
+      // Use seeded Random for initialization
       Random initRandom = randomSeed.HasValue ? new(randomSeed.Value) : new();
       InitializeEnvironmentalMaps(initRandom);
       GenerateInitialFoodSources(initialFoodSources, initRandom);
     }
 
+    private static void ValidateEnvironmentDimensions(double width, double height)
+    {
+      if (double.IsNaN(width) || double.IsInfinity(width))
+        throw new ArgumentException("Environment width must be a finite number", nameof(width));
+      if (double.IsNaN(height) || double.IsInfinity(height))
+        throw new ArgumentException("Environment height must be a finite number", nameof(height));
+      if (width <= 0)
+        throw new ArgumentException("Environment width must be positive", nameof(width));
+      if (height <= 0)
+        throw new ArgumentException("Environment height must be positive", nameof(height));
+      if (width > 100000)
+        throw new ArgumentException("Environment width is too large (max: 100,000)", nameof(width));
+      if (height > 100000)
+        throw new ArgumentException("Environment height is too large (max: 100,000)", nameof(height));
+    }
+
+    private static void ValidateInitialFoodSources(int initialFoodSources)
+    {
+      if (initialFoodSources < 0)
+        throw new ArgumentException("Initial food sources cannot be negative", nameof(initialFoodSources));
+      if (initialFoodSources > 10000)
+        throw new ArgumentException("Initial food sources is too large (max: 10,000)", nameof(initialFoodSources));
+    }
+
     public double GetTemperature(Position position)
     {
-      if (Width <= 0 || Height <= 0) throw new InvalidOperationException("Environment dimensions must be positive");
+      ValidatePosition(position);
 
       int gridX = Math.Min(_mapResolution - 1, Math.Max(0, (int)(position.X / Width * _mapResolution)));
       int gridY = Math.Min(_mapResolution - 1, Math.Max(0, (int)(position.Y / Height * _mapResolution)));
@@ -44,7 +71,7 @@ namespace HiveMind.Infrastructure.Environment
 
     public double GetFoodAvailability(Position position)
     {
-      if (Width <= 0 || Height <= 0) throw new InvalidOperationException("Environment dimensions must be positive");
+      ValidatePosition(position);
 
       // Base environmental food availability
       int gridX = Math.Min(_mapResolution - 1, Math.Max(0, (int)(position.X / Width * _mapResolution)));
@@ -59,9 +86,20 @@ namespace HiveMind.Infrastructure.Environment
       return baseFoodLevel + nearbyFoodSources;
     }
 
-    public bool IsValidPosition(Position position) =>
-      position.X >= 0 && position.X <= Width &&
-      position.Y >= 0 && position.Y <= Height;
+    public bool IsValidPosition(Position position)
+    {
+      if (!position.IsValid) return false;
+
+      return position.X >= 0 && position.X <= Width && position.Y >= 0 && position.Y <= Height;
+    }
+
+    private void ValidatePosition(Position position)
+    {
+      if (position.IsValid)
+        throw new ArgumentException("Position contains invalid coordinates (NaN or Infinity)", nameof(position));
+      if (!IsValidPosition(position))
+        throw new ArgumentOutOfRangeException(nameof(position), $"Position {position} is outside environment bounds (0,0) to ({Width},{Height})");
+    }
 
     public IReadOnlyCollection<IFoodSource> GetFoodSources() =>
       _foodSources.Where(fs => !fs.IsExhausted).ToList().AsReadOnly();
