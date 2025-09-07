@@ -9,12 +9,12 @@ namespace HiveMind.Infrastructure.Data
   /// </summary>
   public class SimulationDataExporter : IDataExporter
   {
-    private readonly ILogger<SimulationDataExporter>? _logger;
+    private readonly ILogger<SimulationDataExporter> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
 
-    public SimulationDataExporter(ILogger<SimulationDataExporter>? logger = null)
+    public SimulationDataExporter(ILogger<SimulationDataExporter> logger)
     {
-      _logger = logger;
+      _logger = logger ?? throw new ArgumentNullException(nameof(logger));
       _jsonOptions = new JsonSerializerOptions
       {
         WriteIndented = true,
@@ -33,6 +33,7 @@ namespace HiveMind.Infrastructure.Data
         {
           csv.AppendLine("No data to export");
           await File.WriteAllTextAsync(filePath, csv.ToString());
+
           return filePath;
         }
 
@@ -59,12 +60,13 @@ namespace HiveMind.Infrastructure.Data
         }
 
         await File.WriteAllTextAsync(filePath, csv.ToString());
-        _logger?.LogInformation("Exported statistics to CSV: {FilePath}", filePath);
+        _logger.LogInformation("Exported statistics to CSV: {FilePath}", filePath);
+
         return filePath;
       }
       catch (Exception ex)
       {
-        _logger?.LogError(ex, "Failed to export statistics to CSV: {FilePath}", filePath);
+        _logger.LogError(ex, "Failed to export statistics to CSV: {FilePath}", filePath);
         throw;
       }
     }
@@ -76,12 +78,13 @@ namespace HiveMind.Infrastructure.Data
         string json = JsonSerializer.Serialize(colonyData, _jsonOptions);
         await File.WriteAllTextAsync(filePath, json);
 
-        _logger?.LogInformation("Exported colony data to JSON: {FilePath}", filePath);
+        _logger.LogInformation("Exported colony data to JSON: {FilePath}", filePath);
+
         return filePath;
       }
       catch (Exception ex)
       {
-        _logger?.LogError(ex, "Failed to export colony data to JSON: {FilePath}", filePath);
+        _logger.LogError(ex, "Failed to export colony data to JSON: {FilePath}", filePath);
         throw;
       }
     }
@@ -99,7 +102,7 @@ namespace HiveMind.Infrastructure.Data
       }
       catch (Exception ex)
       {
-        _logger?.LogError(ex, "Failed to export population data: {FilePath}", filePath);
+        _logger.LogError(ex, "Failed to export population data: {FilePath}", filePath);
         throw;
       }
     }
@@ -117,6 +120,7 @@ namespace HiveMind.Infrastructure.Data
       csv.AppendLine("Soldier,8,55.2,65");
 
       await File.WriteAllTextAsync(filePath, csv.ToString());
+
       return filePath;
     }
   }

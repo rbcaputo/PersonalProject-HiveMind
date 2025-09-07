@@ -22,6 +22,7 @@ namespace HiveMind.Core.Domain.Behaviors
       {
         ant.SetState(ActivityState.Resting);
         ant.RestoreEnergy(1.2);
+
         return;
       }
 
@@ -29,6 +30,7 @@ namespace HiveMind.Core.Domain.Behaviors
       if (DetectThreats())
       {
         EngageThreats(ant);
+
         return;
       }
 

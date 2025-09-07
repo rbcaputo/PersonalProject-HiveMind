@@ -21,6 +21,7 @@ namespace HiveMind.Core.Domain.Behaviors
       {
         ant.SetState(ActivityState.Resting);
         ant.RestoreEnergy(1.1);
+
         return;
       }
 

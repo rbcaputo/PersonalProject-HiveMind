@@ -88,7 +88,8 @@ namespace HiveMind.Infrastructure.Environment
 
     public bool IsValidPosition(Position position)
     {
-      if (!position.IsValid) return false;
+      if (!position.IsValid)
+        return false;
 
       return position.X >= 0 && position.X <= Width && position.Y >= 0 && position.Y <= Height;
     }
@@ -106,9 +107,12 @@ namespace HiveMind.Infrastructure.Environment
 
     public void Update(ISimulationContext context)
     {
+      ArgumentNullException.ThrowIfNull(context);
+
       // Batch removal of exhausted food sources - avoid repeated List.RemoveAll calls
       for (int i = _foodSources.Count - 1; i >= 0; i--)
-        if (_foodSources[i].IsExhausted) _foodSources.RemoveAt(i);
+        if (_foodSources[i].IsExhausted)
+          _foodSources.RemoveAt(i);
 
       // Occasionally spawn new food sources
       if (context.CurrentTick % 500 == 0 && _foodSources.Count < 15)

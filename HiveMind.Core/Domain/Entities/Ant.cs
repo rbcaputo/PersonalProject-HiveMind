@@ -43,7 +43,8 @@ namespace HiveMind.Core.Domain.Entities
 
     public void Update(ISimulationContext context)
     {
-      if (!IsAlive) return;
+      if (!IsAlive)
+        return;
 
       // Age the ant
       Age++;
@@ -68,7 +69,8 @@ namespace HiveMind.Core.Domain.Entities
 
     public void MoveTo(Position newPosition)
     {
-      if (CurrentState == ActivityState.Dead) return;
+      if (CurrentState == ActivityState.Dead)
+        return;
 
       _targetPosition = newPosition;
       CurrentState = ActivityState.Moving;
@@ -76,34 +78,41 @@ namespace HiveMind.Core.Domain.Entities
 
     public void ConsumeEnergy(double amount)
     {
-      if (!IsAlive) return;
+      if (!IsAlive)
+        return;
 
       double previousEnergy = Energy;
       Energy = Math.Max(0, Energy - amount);
 
       // If energy hits zero, start tracking starvation
-      if (Energy == 0 && previousEnergy > 0) _zeroEnergyTicks = 1;
+      if (Energy == 0 && previousEnergy > 0)
+        _zeroEnergyTicks = 1;
     }
 
     public void RestoreEnergy(double amount)
     {
-      if (!IsAlive) return;
+      if (!IsAlive)
+        return;
 
       Energy = Math.Min(MaxEnergy, Energy + amount);
 
       // Reset starvation counter when energy is restored
-      if (Energy > 0) _zeroEnergyTicks = 0;
+      if (Energy > 0)
+        _zeroEnergyTicks = 0;
     }
 
     public bool IsStarving =>
       Energy == 0 && _zeroEnergyTicks > 0;
 
     public double HealthRatio =>
-      MaxHealth > 0 ? Energy / MaxHealth : 0;
+      MaxHealth > 0
+        ? Energy / MaxHealth
+        : 0;
 
     public double EnergyRatio =>
-      MaxEnergy > 0 ? Energy / MaxEnergy : 0;
-
+      MaxEnergy > 0
+        ? Energy / MaxEnergy
+        : 0;
 
     private void HandleStarvation()
     {
@@ -119,7 +128,8 @@ namespace HiveMind.Core.Domain.Entities
 
           // Set starving state for behavior awareness
           // Force rest when starving
-          if (CurrentState != ActivityState.Dead) CurrentState = ActivityState.Resting;
+          if (CurrentState != ActivityState.Dead)
+            CurrentState = ActivityState.Resting;
         }
       }
       else if (Energy < MaxEnergy * 0.1) // Very low energy (below 10%)
@@ -140,6 +150,7 @@ namespace HiveMind.Core.Domain.Entities
     {
       double dropped = CarriedFood;
       CarriedFood = 0;
+
       return dropped;
     }
 
@@ -179,7 +190,8 @@ namespace HiveMind.Core.Domain.Entities
 
     private void UpdateMovement(ISimulationContext context)
     {
-      if (CurrentState != ActivityState.Moving || Position.Equals(_targetPosition)) return;
+      if (CurrentState != ActivityState.Moving || Position.Equals(_targetPosition))
+        return;
 
       double distance = Position.DistanceTo(_targetPosition);
       double moveDistance = Speed * context.DeltaTime;

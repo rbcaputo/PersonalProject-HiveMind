@@ -22,12 +22,16 @@ namespace HiveMind.Core.Domain.Behaviors
       {
         ant.SetState(ActivityState.Resting);
         ant.RestoreEnergy(1.0);
+
         return;
       }
 
-      if (ant.CarriedFood > 0) ReturnToNest(ant);
-      else if (_targetFoodSource != null && !_targetFoodSource.IsExhausted) CollectFoodFromSource(ant);
-      else SearchForFood(ant, context);
+      if (ant.CarriedFood > 0)
+        ReturnToNest(ant);
+      else if (_targetFoodSource != null && !_targetFoodSource.IsExhausted)
+        CollectFoodFromSource(ant);
+      else
+        SearchForFood(ant, context);
     }
 
     private void ReturnToNest(Ant ant)
@@ -35,15 +39,17 @@ namespace HiveMind.Core.Domain.Behaviors
       _returningToNest = true;
       ant.SetState(ActivityState.Moving);
 
-      var nestPosition = ant.Colony.CenterPosition;
-      var distanceToNest = ant.Position.DistanceTo(nestPosition);
+      Position nestPosition = ant.Colony.CenterPosition;
+      double distanceToNest = ant.Position.DistanceTo(nestPosition);
 
-      if (distanceToNest > 2.0) ant.MoveTo(nestPosition);
+      if (distanceToNest > 2.0)
+        ant.MoveTo(nestPosition);
       else
       {
         // Arrived at nest - drop food and add to colony
-        var droppedFood = ant.DropFood();
-        if (droppedFood > 0) ant.Colony.AddFood(droppedFood);
+        double droppedFood = ant.DropFood();
+        if (droppedFood > 0)
+          ant.Colony.AddFood(droppedFood);
 
         // Always reset when reaching nest
         _returningToNest = false;
@@ -57,7 +63,7 @@ namespace HiveMind.Core.Domain.Behaviors
       if (_targetFoodSource == null)
         return;
 
-      var distanceToFood = ant.Position.DistanceTo(_targetFoodSource.Position);
+      double distanceToFood = ant.Position.DistanceTo(_targetFoodSource.Position);
       if (distanceToFood > 1.0)
       {
         ant.SetState(ActivityState.Moving);
@@ -68,26 +74,28 @@ namespace HiveMind.Core.Domain.Behaviors
         // At food source - collect food
         ant.SetState(ActivityState.Foraging);
 
-        var harvestedAmount = _targetFoodSource.Harvest(5.0);
+        double harvestedAmount = _targetFoodSource.Harvest(5.0);
 
         ant.CollectFood(harvestedAmount);
         ant.ConsumeEnergy(0.3);
 
-        if (_targetFoodSource.IsExhausted || ant.CarriedFood >= 10) _targetFoodSource = null;
+        if (_targetFoodSource.IsExhausted || ant.CarriedFood >= 10)
+          _targetFoodSource = null;
       }
     }
 
     private void SearchForFood(Ant ant, ISimulationContext context)
     {
-      var antPosition = ant.Position;
-      var foodSourcesWithDistance = new List<(IFoodSource source, double distance)>();
+      Position antPosition = ant.Position;
+      List<(IFoodSource source, double distance)> foodSourcesWithDistance = [];
 
       // Single pass to calculate distances and filter
       foreach (var fs in context.Environment.GetFoodSources())
         if (!fs.IsExhausted)
         {
-          var distance = fs.Position.DistanceTo(antPosition);
-          if (distance <= _forageRadius) foodSourcesWithDistance.Add((fs, distance));
+          double distance = fs.Position.DistanceTo(antPosition);
+          if (distance <= _forageRadius)
+            foodSourcesWithDistance.Add((fs, distance));
         }
 
       // Find closest food source from pre-calculated distances
@@ -97,7 +105,8 @@ namespace HiveMind.Core.Domain.Behaviors
         ant.SetState(ActivityState.Moving);
         ant.MoveTo(_targetFoodSource.Position);
       }
-      else ExploreRandomly(ant, context); // No food sources found - explore randomly
+      else
+        ExploreRandomly(ant, context); // No food sources found - explore randomly
     }
 
     private void ExploreRandomly(Ant ant, ISimulationContext context)
@@ -105,12 +114,12 @@ namespace HiveMind.Core.Domain.Behaviors
       if (_exploreTarget == null || ant.Position.DistanceTo(_exploreTarget.Value) < 2.0)
       {
         // Generate new exploration target
-        var nestPosition = ant.Colony.CenterPosition;
-        var angle = context.Random.NextDouble() * 2 * Math.PI;
-        var distance = context.Random.NextDouble() * _forageRadius;
+        Position nestPosition = ant.Colony.CenterPosition;
+        double angle = context.Random.NextDouble() * 2 * Math.PI;
+        double distance = context.Random.NextDouble() * _forageRadius;
 
-        var x = nestPosition.X + Math.Cos(angle) * distance;
-        var y = nestPosition.Y + Math.Sin(angle) * distance;
+        double x = nestPosition.X + Math.Cos(angle) * distance;
+        double y = nestPosition.Y + Math.Sin(angle) * distance;
 
         _exploreTarget = new Position(x, y);
       }

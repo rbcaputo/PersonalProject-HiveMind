@@ -21,6 +21,7 @@ namespace HiveMind.Core.Domain.Behaviors
       {
         ant.SetState(ActivityState.Resting);
         ant.RestoreEnergy(1.3);
+
         return;
       }
 
@@ -43,7 +44,7 @@ namespace HiveMind.Core.Domain.Behaviors
       double x = nestPosition.X + Math.Cos(angle) * distance;
       double y = nestPosition.Y + Math.Sin(angle) * distance;
 
-      _careTarget = new Position(x, y);
+      _careTarget = new(x, y);
       ant.SetState(ActivityState.Caring);
     }
 

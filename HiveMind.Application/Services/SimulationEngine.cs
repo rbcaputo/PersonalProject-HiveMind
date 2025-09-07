@@ -2,7 +2,6 @@
 using HiveMind.Application.Models;
 using HiveMind.Core.Domain.Entities;
 using HiveMind.Core.Domain.Interfaces;
-using HiveMind.Infrastructure.Environment;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 
@@ -16,7 +15,8 @@ namespace HiveMind.Application.Services
     private readonly List<IColony> _colonies;
     private readonly Timer _simulationTimer;
     private readonly Stopwatch _performanceTimer;
-    private readonly ILogger<SimulationEngine>? _logger;
+    private readonly IEnvironmentFactory _environmentFactory;
+    private readonly ILogger<SimulationEngine> _logger;
 
     private SimulationState _state = SimulationState.Uninitialized;
     private SimulationConfiguration? _configuration;
@@ -39,12 +39,13 @@ namespace HiveMind.Application.Services
     public event EventHandler<SimulationStateChangedEventArgs>? StateChanged;
     public event EventHandler<SimulationTickEventArgs>? Tick;
 
-    public SimulationEngine(ILogger<SimulationEngine>? logger = null)
+    public SimulationEngine(IEnvironmentFactory environmentFactory, ILogger<SimulationEngine> logger)
     {
       _colonies = [];
       _performanceTimer = new();
-      _logger = logger;
       _simulationTimer = new(SimulationTimerCallback, null, Timeout.Infinite, Timeout.Infinite);
+      _environmentFactory = environmentFactory ?? throw new ArgumentNullException(nameof(environmentFactory));
+      _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public Task InitializeAsync(SimulationConfiguration config)
@@ -55,7 +56,7 @@ namespace HiveMind.Application.Services
       _configuration = config ?? throw new ArgumentNullException(nameof(config));
 
       // Initialize environment
-      _environment = new SimulationEnvironment(
+      _environment = _environmentFactory.CreateEnvironment(
         _configuration.EnvironmentWidth,
         _configuration.EnvironmentHeight,
         _configuration.InitialFoodSources,
@@ -94,7 +95,7 @@ namespace HiveMind.Application.Services
       _lastTickPopulation = _antLifeTracker.Count;
 
       SetState(SimulationState.Initialized);
-      _logger?.LogInformation("Simulation initialized with {ColonyCount} colonies and {InitialPopulation} initial ants", _colonies.Count, _lastTickPopulation);
+      _logger.LogInformation("Simulation initialized with {ColonyCount} colonies and {InitialPopulation} initial ants", _colonies.Count, _lastTickPopulation);
 
       return Task.CompletedTask;
     }
@@ -105,7 +106,8 @@ namespace HiveMind.Application.Services
     private void ValidateColoniesInitialized()
     {
       List<AntColony> uninitializedColonies = [.. _colonies.OfType<AntColony>().Where(c => !c.IsInitialized)];
-      if (uninitializedColonies.Count != 0) throw new InvalidOperationException($"Found {uninitializedColonies.Count} uninitialized colonies. " +
+      if (uninitializedColonies.Count != 0)
+        throw new InvalidOperationException($"Found {uninitializedColonies.Count} uninitialized colonies. " +
         "All colonies must be initialized before starting simulation.");
     }
 
@@ -123,7 +125,7 @@ namespace HiveMind.Application.Services
       _performanceTimer.Start();
 
       SetState(SimulationState.Running);
-      _logger?.LogInformation("Simulation started with target {TPS} TPS", _configuration.TargetTPS);
+      _logger.LogInformation("Simulation started with target {TPS} TPS", _configuration.TargetTPS);
 
       return Task.CompletedTask;
     }
@@ -137,14 +139,15 @@ namespace HiveMind.Application.Services
       _performanceTimer.Stop();
 
       SetState(SimulationState.Paused);
-      _logger?.LogInformation("Simulation paused at tick {Tick}", _currentTick);
+      _logger.LogInformation("Simulation paused at tick {Tick}", _currentTick);
 
       return Task.CompletedTask;
     }
 
     public async Task StopAsync()
     {
-      if (_state == SimulationState.Uninitialized || _state == SimulationState.Stopped) return;
+      if (_state == SimulationState.Uninitialized || _state == SimulationState.Stopped)
+        return;
 
       // Stop the timer
       _simulationTimer.Change(Timeout.Infinite, Timeout.Infinite);
@@ -155,7 +158,7 @@ namespace HiveMind.Application.Services
       _performanceTimer.Stop();
 
       SetState(SimulationState.Stopped);
-      _logger?.LogInformation("Simulation stopped at tick {Tick}", _currentTick);
+      _logger.LogInformation("Simulation stopped at tick {Tick}", _currentTick);
     }
 
     public Task StepAsync()
@@ -170,7 +173,8 @@ namespace HiveMind.Application.Services
 
     private void SimulationTimerCallback(object? state)
     {
-      if (_disposed || _state != SimulationState.Running) return;
+      if (_disposed || _state != SimulationState.Running)
+        return;
 
       try
       {
@@ -182,7 +186,7 @@ namespace HiveMind.Application.Services
       }
       catch (Exception ex)
       {
-        _logger?.LogError(ex, "Error during simulation step");
+        _logger.LogError(ex, "Error during simulation step");
         SetState(SimulationState.Error);
       }
     }
@@ -199,13 +203,14 @@ namespace HiveMind.Application.Services
 
       // Update all colonies
       List<IColony> activeColonies = [.. _colonies.Where(c => c.IsActive)];
-      foreach (IColony colony in activeColonies) colony.Update(_context);
+      foreach (IColony colony in activeColonies)
+        colony.Update(_context);
 
       // Remove inactive colonies
       _colonies.RemoveAll(c => !c.IsActive);
 
       // Update environment
-      if (_environment is SimulationEnvironment simEnv) simEnv.Update(_context);
+      Environment.Update(_context);
 
       // Track births and deaths
       UpdateBirthDeathStatistics();
@@ -220,10 +225,11 @@ namespace HiveMind.Application.Services
       Tick?.Invoke(this, new SimulationTickEventArgs(_currentTick, _configuration.DeltaTime, statistics));
 
       // Check termination conditions
-      if (_configuration.MaxTicks > 0 && _currentTick >= _configuration.MaxTicks) Task.Run(StopAsync); // Use Task.Run to avoid blocking the timer thread
+      if (_configuration.MaxTicks > 0 && _currentTick >= _configuration.MaxTicks)
+        Task.Run(StopAsync); // Use Task.Run to avoid blocking the timer thread
       else if (_colonies.Count == 0)
       {
-        _logger?.LogInformation("All colonies extinct - stopping simulation");
+        _logger.LogInformation("All colonies extinct - stopping simulation");
         Task.Run(StopAsync);
       }
     }
@@ -267,13 +273,15 @@ namespace HiveMind.Application.Services
       foreach (Guid trackedAntId in _antLifeTracker.Keys)
         if (!currentAntIds.Contains(trackedAntId))
         {
-          if (_antLifeTracker[trackedAntId]) _totalDeathCount++; // Was alive, now gone = death
+          if (_antLifeTracker[trackedAntId])
+            _totalDeathCount++; // Was alive, now gone = death
 
           antsToRemove.Add(trackedAntId);
         }
 
       // Remove in separate loop to avoid modification during iteration
-      foreach (Guid antId in antsToRemove) _antLifeTracker.Remove(antId);
+      foreach (Guid antId in antsToRemove)
+        _antLifeTracker.Remove(antId);
 
       _lastTickPopulation = currentAliveCounts.Count;
     }
@@ -337,7 +345,7 @@ namespace HiveMind.Application.Services
           }
           catch (Exception ex)
           {
-            _logger?.LogWarning(ex, "Error during simulation shutdown in Dispose");
+            _logger.LogWarning(ex, "Error during simulation shutdown in Dispose");
           }
         }
 
@@ -348,7 +356,7 @@ namespace HiveMind.Application.Services
         }
         catch (Exception ex)
         {
-          _logger?.LogWarning(ex, "Error disposing simulation timer");
+          _logger.LogWarning(ex, "Error disposing simulation timer");
         }
 
         _antLifeTracker.Clear();

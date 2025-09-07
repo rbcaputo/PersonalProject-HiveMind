@@ -10,13 +10,13 @@ namespace HiveMind.Infrastructure.Persistence
   public class FileSystemPersistence : ISimulationPersistence
   {
     private readonly string _basePath;
-    private readonly ILogger<FileSystemPersistence>? _logger;
+    private readonly ILogger<FileSystemPersistence> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
 
-    public FileSystemPersistence(string? basePath = null, ILogger<FileSystemPersistence>? logger = null)
+    public FileSystemPersistence(ILogger<FileSystemPersistence> logger, string? basePath = null)
     {
       _basePath = basePath ?? Path.Combine(GetFolderPath(SpecialFolder.LocalApplicationData), "HiveMind", "Snapshots");
-      _logger = logger;
+      _logger = logger ?? throw new ArgumentNullException(nameof(logger));
       _jsonOptions = new()
       {
         WriteIndented = true,
@@ -37,12 +37,12 @@ namespace HiveMind.Infrastructure.Persistence
 
         await File.WriteAllTextAsync(filePath, json);
 
-        _logger?.LogInformation("Saved simulation snapshot {SnapshotId} to {FilePath}", snapshot.Id, filePath);
+        _logger.LogInformation("Saved simulation snapshot {SnapshotId} to {FilePath}", snapshot.Id, filePath);
         return snapshot.Id.ToString();
       }
       catch (Exception ex)
       {
-        _logger?.LogError(ex, "Failed to save simulation snapshot {SnapshotId}", snapshot.Id);
+        _logger.LogError(ex, "Failed to save simulation snapshot {SnapshotId}", snapshot.Id);
         throw;
       }
     }
@@ -56,19 +56,19 @@ namespace HiveMind.Infrastructure.Persistence
 
         if (!File.Exists(filePath))
         {
-          _logger?.LogWarning("Snapshot file not found: {FilePath}", filePath);
+          _logger.LogWarning("Snapshot file not found: {FilePath}", filePath);
           return null;
         }
 
         string json = await File.ReadAllTextAsync(filePath);
         SimulationSnapshot? snapshot = JsonSerializer.Deserialize<SimulationSnapshot>(json, _jsonOptions);
 
-        _logger?.LogInformation("Loaded simulation snapshot {SnapshotId} from {FilePath}", snapshotId, filePath);
+        _logger.LogInformation("Loaded simulation snapshot {SnapshotId} from {FilePath}", snapshotId, filePath);
         return snapshot;
       }
       catch (Exception ex)
       {
-        _logger?.LogError(ex, "Failed to load simulation snapshot {SnapshotId}", snapshotId);
+        _logger.LogError(ex, "Failed to load simulation snapshot {SnapshotId}", snapshotId);
         throw;
       }
     }
@@ -86,11 +86,12 @@ namespace HiveMind.Infrastructure.Persistence
           {
             string json = await File.ReadAllTextAsync(filePath);
             SimulationSnapshot? snapshot = JsonSerializer.Deserialize<SimulationSnapshot>(json, _jsonOptions);
-            if (snapshot != null) snapshots.Add(snapshot);
+            if (snapshot != null)
+              snapshots.Add(snapshot);
           }
           catch (Exception ex)
           {
-            _logger?.LogWarning(ex, "Failed to deserialize snapshot file: {FilePath}", filePath);
+            _logger.LogWarning(ex, "Failed to deserialize snapshot file: {FilePath}", filePath);
           }
         }
 
@@ -98,7 +99,7 @@ namespace HiveMind.Infrastructure.Persistence
       }
       catch (Exception ex)
       {
-        _logger?.LogError(ex, "Failed to get snapshots from directory: {BasePath}", _basePath);
+        _logger.LogError(ex, "Failed to get snapshots from directory: {BasePath}", _basePath);
         throw;
       }
     }
@@ -112,17 +113,20 @@ namespace HiveMind.Infrastructure.Persistence
 
         if (!File.Exists(filePath))
         {
-          _logger?.LogWarning("Cannot delete snapshot - file not found: {FilePath}", filePath);
+          _logger.LogWarning("Cannot delete snapshot - file not found: {FilePath}", filePath);
+
           return false;
         }
 
         await Task.Run(() => File.Delete(filePath));
-        _logger?.LogInformation("Deleted simulation snapshot {SnapshotId}", snapshotId);
+        _logger.LogInformation("Deleted simulation snapshot {SnapshotId}", snapshotId);
+
         return true;
       }
       catch (Exception ex)
       {
-        _logger?.LogError(ex, "Failed to delete simulation snapshot {SnapshotId}", snapshotId);
+        _logger.LogError(ex, "Failed to delete simulation snapshot {SnapshotId}", snapshotId);
+
         return false;
       }
     }
@@ -152,12 +156,13 @@ namespace HiveMind.Infrastructure.Persistence
             throw new ArgumentException($"Unsupported export format: {format}");
         }
 
-        _logger?.LogInformation("Exported simulation data to {ExportPath}", exportFilePath);
+        _logger.LogInformation("Exported simulation data to {ExportPath}", exportFilePath);
+
         return exportFilePath;
       }
       catch (Exception ex)
       {
-        _logger?.LogError(ex, "Failed to export simulation data for snapshot {SnapshotId}", snapshotId);
+        _logger.LogError(ex, "Failed to export simulation data for snapshot {SnapshotId}", snapshotId);
         throw;
       }
     }
@@ -187,7 +192,7 @@ namespace HiveMind.Infrastructure.Persistence
       if (!Directory.Exists(_basePath))
       {
         Directory.CreateDirectory(_basePath);
-        _logger?.LogInformation("Created snapshots directory: {BasePath}", _basePath);
+        _logger.LogInformation("Created snapshots directory: {BasePath}", _basePath);
       }
     }
   }

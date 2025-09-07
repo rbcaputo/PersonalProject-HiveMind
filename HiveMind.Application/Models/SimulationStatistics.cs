@@ -15,9 +15,7 @@
     public Dictionary<string, int> PopulationByRole { get; set; } = [];
     public double SimulationTimeElapsed { get; set; }
 
-    public override string ToString()
-    {
-      return $"Tick: {CurrentTick}, Population: {TotalPopulation}, Colonies: {ActiveColonies}, Food: {TotalFoodStored:F1}";
-    }
+    public override string ToString() =>
+      $"Tick: {CurrentTick}, Population: {TotalPopulation}, Colonies: {ActiveColonies}, Food: {TotalFoodStored:F1}";
   }
 }

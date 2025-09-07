@@ -6,9 +6,9 @@ namespace HiveMind.Infrastructure.Monitoring
   /// <summary>
   /// Implementation of performance monitoring for the simulation
   /// </summary>
-  public class SimulationPerformanceMonitor(ILogger<SimulationPerformanceMonitor>? logger = null) : IPerformanceMonitor
+  public class SimulationPerformanceMonitor(ILogger<SimulationPerformanceMonitor> logger) : IPerformanceMonitor
   {
-    private readonly ILogger<SimulationPerformanceMonitor>? _logger = logger;
+    private readonly ILogger<SimulationPerformanceMonitor> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly Queue<double> _tickTimes = new();
     private readonly object _lock = new();
     private readonly Stopwatch _runtimeStopwatch = Stopwatch.StartNew();
@@ -27,12 +27,16 @@ namespace HiveMind.Infrastructure.Monitoring
         _tickTimes.Enqueue(milliseconds);
         _totalTicks++;
 
-        if (_tickTimes.Count > 1000) _tickTimes.Dequeue();
-        if (milliseconds < _minTickTime) _minTickTime = milliseconds;
-        if (milliseconds > _maxTickTime) _maxTickTime = milliseconds;
+        if (_tickTimes.Count > 1000)
+          _tickTimes.Dequeue();
+        if (milliseconds < _minTickTime)
+          _minTickTime = milliseconds;
+        if (milliseconds > _maxTickTime)
+          _maxTickTime = milliseconds;
 
         // Log performance warnings
-        if (milliseconds > 100) _logger?.LogWarning("Slow tick detected: {TickTime:F2}ms", milliseconds); // Tick took longer than 100ms
+        if (milliseconds > 100)
+          _logger.LogWarning("Slow tick detected: {TickTime:F2}ms", milliseconds); // Tick took longer than 100ms
       }
     }
 
@@ -100,7 +104,7 @@ namespace HiveMind.Infrastructure.Monitoring
         _peakPopulation = 0;
         _runtimeStopwatch.Restart();
 
-        _logger?.LogInformation("Performance monitor reset");
+        _logger.LogInformation("Performance monitor reset");
       }
     }
   }

@@ -36,5 +36,10 @@ namespace HiveMind.Core.Domain.Interfaces
     /// Gets all food sources in the environment
     /// </summary>
     IReadOnlyCollection<IFoodSource> GetFoodSources();
+
+    /// <summary>
+    /// Updates the environment for the current simulation tick
+    /// </summary>
+    void Update(ISimulationContext context);
   }
 }

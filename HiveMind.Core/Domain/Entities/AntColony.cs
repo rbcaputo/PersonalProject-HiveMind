@@ -31,7 +31,9 @@ namespace HiveMind.Core.Domain.Entities
 
     public void Initialize(ISimulationContext context)
     {
-      if (_isInitialized) throw new InvalidOperationException("Colony has already been initialized");
+      if (_isInitialized)
+        throw new InvalidOperationException("Colony has already been initialized");
+      
       ArgumentNullException.ThrowIfNull(context);
 
       InitializeColony(context);
@@ -61,7 +63,9 @@ namespace HiveMind.Core.Domain.Entities
         _lastCacheUpdate = LastUpdatedAt.Ticks;
       }
 
-      return _roleCache.TryGetValue(role, out var ants) ? ants : Enumerable.Empty<Ant>();
+      return _roleCache.TryGetValue(role, out var ants)
+        ? ants
+        : Enumerable.Empty<Ant>();
     }
 
     public void RefreshRoleCache()
@@ -70,17 +74,17 @@ namespace HiveMind.Core.Domain.Entities
 
       foreach (var ant in _members.Values.Where(a => a.IsAlive))
       {
-        if (!_roleCache.ContainsKey(ant.Role)) _roleCache[ant.Role] = [];
+        if (!_roleCache.ContainsKey(ant.Role))
+          _roleCache[ant.Role] = [];
 
         _roleCache[ant.Role].Add(ant);
       }
-
-
     }
 
     public void RemoveMember(Guid insectId)
     {
-      if (!_members.ContainsKey(insectId)) return;
+      if (!_members.ContainsKey(insectId))
+        return;
 
       _members.Remove(insectId);
       UpdateTimestamp();
@@ -88,8 +92,10 @@ namespace HiveMind.Core.Domain.Entities
 
     public void Update(ISimulationContext context)
     {
-      if (!_isInitialized) throw new InvalidOperationException("Colony must be initialized before updating");
-      if (!IsActive) return;
+      if (!_isInitialized)
+        throw new InvalidOperationException("Colony must be initialized before updating");
+      if (!IsActive)
+        return;
 
       // Single-pass update with combined operations
       List<Guid> deadAnts = [];
@@ -106,16 +112,18 @@ namespace HiveMind.Core.Domain.Entities
             double distanceToNest = ant.Position.DistanceTo(CenterPosition);
             if (distanceToNest < 2.0)
             {
-              var droppedFood = ant.DropFood();
+              double droppedFood = ant.DropFood();
               TotalFoodStored += droppedFood;
             }
           }
         }
-        else deadAnts.Add(ant.Id); // Collect dead ants for removal
+        else
+          deadAnts.Add(ant.Id); // Collect dead ants for removal
       }
 
       // Remove dead ants in single operation
-      foreach (Guid deadAntId in deadAnts) _members.Remove(deadAntId);
+      foreach (Guid deadAntId in deadAnts)
+        _members.Remove(deadAntId);
 
       // Colony-level behaviors
       ManagePopulation(context);
@@ -133,6 +141,7 @@ namespace HiveMind.Core.Domain.Entities
       if (TotalFoodStored >= amount)
       {
         TotalFoodStored -= amount;
+        
         return true;
       }
 
@@ -167,10 +176,12 @@ namespace HiveMind.Core.Domain.Entities
 
     private void ManagePopulation(ISimulationContext context)
     {
-      if (!HasQueen || Population >= MaxPopulation) return;
+      if (!HasQueen || Population >= MaxPopulation)
+        return;
 
       // Simple reproduction logic - queen spawns new ants periodically
-      if (context.CurrentTick % 100 == 0 && TotalFoodStored > 50) SpawnNewAnt(context);
+      if (context.CurrentTick % 100 == 0 && TotalFoodStored > 50)
+        SpawnNewAnt(context);
     }
 
     private void ManageFood()
@@ -180,7 +191,8 @@ namespace HiveMind.Core.Domain.Entities
       TotalFoodStored = Math.Max(0, TotalFoodStored - consumptionRate);
 
       // If food is low, send more foragers
-      if (TotalFoodStored < Population * 2) DispatchForagers();
+      if (TotalFoodStored < Population * 2)
+        DispatchForagers();
     }
 
     private void ExpandTerritory(ISimulationContext context)
@@ -211,8 +223,10 @@ namespace HiveMind.Core.Domain.Entities
       int soldierCount = GetAntsByRole(AntRole.Soldier).Count();
 
       // Simple role distribution logic
-      if (foragerCount < Population * 0.3) return AntRole.Forager;
-      if (soldierCount < Population * 0.1) return AntRole.Soldier;
+      if (foragerCount < Population * 0.3)
+        return AntRole.Forager;
+      if (soldierCount < Population * 0.1)
+        return AntRole.Soldier;
 
       return AntRole.Worker;
     }

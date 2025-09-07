@@ -34,7 +34,8 @@ namespace HiveMind.Infrastructure.Serialization
 
     public string Serialize<T>(T obj)
     {
-      if (obj == null) throw new ArgumentNullException(nameof(obj));
+      if (obj == null)
+        throw new ArgumentNullException(nameof(obj));
 
       try
       {
@@ -52,7 +53,8 @@ namespace HiveMind.Infrastructure.Serialization
 
     public T? Deserialize<T>(string data)
     {
-      if (string.IsNullOrWhiteSpace(data)) return default;
+      if (string.IsNullOrWhiteSpace(data))
+        return default;
 
       try
       {
@@ -89,12 +91,14 @@ namespace HiveMind.Infrastructure.Serialization
     {
       public override Position Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
       {
-        if (reader.TokenType != JsonTokenType.StartObject) throw new JsonException("Expected StartObject token");
+        if (reader.TokenType != JsonTokenType.StartObject)
+          throw new JsonException("Expected StartObject token");
 
         double x = 0, y = 0;
         while (reader.Read())
         {
-          if (reader.TokenType == JsonTokenType.EndObject) break;
+          if (reader.TokenType == JsonTokenType.EndObject)
+            break;
           if (reader.TokenType == JsonTokenType.PropertyName)
           {
             string? propertyName = reader.GetString();

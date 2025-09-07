@@ -1,6 +1,7 @@
 ﻿using HiveMind.Application.Interfaces;
 using HiveMind.Application.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace HiveMind.Application.Extensions
 {
@@ -14,7 +15,34 @@ namespace HiveMind.Application.Extensions
     /// </summary>
     public static IServiceCollection AddHiveMindApplication(this IServiceCollection services)
     {
-      services.AddSingleton<ISimulationEngine, SimulationEngine>();
+      // Register simulation engine
+      services.AddSingleton<ISimulationEngine>(provider =>
+      {
+        IEnvironmentFactory environmentFactory = provider.GetRequiredService<IEnvironmentFactory>();
+        ILoggerFactory loggerFactory = provider.GetRequiredService<ILoggerFactory>();
+        ILogger<SimulationEngine> logger = loggerFactory.CreateLogger<SimulationEngine>();
+
+        return new SimulationEngine(environmentFactory, logger);
+      });
+
+      return services;
+    }
+
+    /// <summary>
+    /// Adds HiveMind application services with validation
+    /// </summary>
+    public static IServiceCollection AddHiveMindApplicationWithValidation(this IServiceCollection services)
+    {
+      services.AddHiveMindApplication();
+
+      // Add service validation
+      services.AddSingleton(provider =>
+      {
+        // Validate that the simulation engine was properly registered
+        var engine = provider.GetRequiredService<ISimulationEngine>() ?? throw new InvalidOperationException("SimulationEngine was not properly registered");
+
+        return engine;
+      });
 
       return services;
     }

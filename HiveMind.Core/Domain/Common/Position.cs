@@ -23,16 +23,27 @@ namespace HiveMind.Core.Domain.Common
     /// <summary>
     /// Creates a position with validation and clamping
     /// </summary>
-    public static Position Create(double x, double y, double? minX = null, double? maxX = null, double? minY = null, double? maxY = null)
+    public static Position Create(
+      double x,
+      double y,
+      double? minX = null,
+      double? maxX = null,
+      double? minY = null,
+      double? maxY = null
+    )
     {
       ValidateCoordinate(x, nameof(x));
       ValidateCoordinate(y, nameof(y));
 
       // Apply bounds if specified
-      if (minX.HasValue) x = Math.Max(x, minX.Value);
-      if (maxX.HasValue) x = Math.Min(x, maxX.Value);
-      if (minY.HasValue) y = Math.Max(y, minY.Value);
-      if (maxY.HasValue) y = Math.Min(y, maxY.Value);
+      if (minX.HasValue)
+        x = Math.Max(x, minX.Value);
+      if (maxX.HasValue)
+        x = Math.Min(x, maxX.Value);
+      if (minY.HasValue)
+        y = Math.Max(y, minY.Value);
+      if (maxY.HasValue)
+        y = Math.Min(y, maxY.Value);
 
       return new(x, y);
     }
@@ -42,8 +53,10 @@ namespace HiveMind.Core.Domain.Common
     /// </summary>
     private static void ValidateCoordinate(double value, string paramName)
     {
-      if (double.IsNaN(value)) throw new ArgumentException($"Position coordinate cannot be NaN", paramName);
-      if (double.IsInfinity(value)) throw new ArgumentException($"Position coordinate cannot be infinite", paramName);
+      if (double.IsNaN(value))
+        throw new ArgumentException($"Position coordinate cannot be NaN", paramName);
+      if (double.IsInfinity(value))
+        throw new ArgumentException($"Position coordinate cannot be infinite", paramName);
     }
 
     // Distance calculation
@@ -76,8 +89,10 @@ namespace HiveMind.Core.Domain.Common
     /// </summary>
     public Position ClampToBounds(double minX, double minY, double maxX, double maxY)
     {
-      if (minX >= maxX) throw new ArgumentException("minX must be less than maxX");
-      if (minY >= maxY) throw new ArgumentException("minY must be less than maxY");
+      if (minX >= maxX)
+        throw new ArgumentException("minX must be less than maxX");
+      if (minY >= maxY)
+        throw new ArgumentException("minY must be less than maxY");
 
       double clampedX = Math.Max(minX, Math.Min(maxX, X));
       double clampedY = Math.Max(minY, Math.Min(maxY, Y));
@@ -91,17 +106,20 @@ namespace HiveMind.Core.Domain.Common
     public override bool Equals([NotNullWhen(true)] object? obj) =>
       obj is Position other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(X, Y);
+    public override int GetHashCode() =>
+      HashCode.Combine(X, Y);
 
     public static bool operator ==(Position left, Position right) => left.Equals(right);
     public static bool operator !=(Position left, Position right) => !left.Equals(right);
 
-    public override string ToString() => $"({X:F2}, {Y:F2})";
+    public override string ToString() =>
+      $"({X:F2}, {Y:F2})";
 
     /// <summary>
     /// Origin position (0, 0)
     /// </summary>
-    public static Position Origin => new(0, 0);
+    public static Position Origin =>
+      new(0, 0);
 
     /// <summary>
     /// Checks if position has valid coordinates

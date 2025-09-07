@@ -31,7 +31,8 @@
     /// </summary>
     public static void EnsureDirectoryExists(string path)
     {
-      if (!Directory.Exists(path)) Directory.CreateDirectory(path);
+      if (!Directory.Exists(path))
+        Directory.CreateDirectory(path);
     }
 
     /// <summary>
@@ -43,8 +44,10 @@
       string safeName = string.Join("_", fileName.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries));
 
       // Limit length and ensure it's not empty
-      if (string.IsNullOrWhiteSpace(safeName)) safeName = "unnamed";
-      else if (safeName.Length > 100) safeName = safeName[..100];
+      if (string.IsNullOrWhiteSpace(safeName))
+        safeName = "unnamed";
+      else if (safeName.Length > 100)
+        safeName = safeName[..100];
 
       return safeName;
     }
@@ -57,6 +60,7 @@
       try
       {
         DriveInfo drive = new(Path.GetPathRoot(path) ?? "C:");
+
         return drive.AvailableFreeSpace;
       }
       catch
@@ -72,7 +76,8 @@
     {
       try
       {
-        if (!Directory.Exists(directory)) return;
+        if (!Directory.Exists(directory))
+          return;
 
         List<FileInfo> files = [.. Directory.GetFiles(directory, searchPattern)
           .Select(f => new FileInfo(f))

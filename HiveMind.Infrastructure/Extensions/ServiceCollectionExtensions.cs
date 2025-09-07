@@ -1,5 +1,7 @@
-﻿using HiveMind.Infrastructure.Configuration;
+﻿using HiveMind.Application.Interfaces;
+using HiveMind.Infrastructure.Configuration;
 using HiveMind.Infrastructure.Data;
+using HiveMind.Infrastructure.Factories;
 using HiveMind.Infrastructure.Logging;
 using HiveMind.Infrastructure.Monitoring;
 using HiveMind.Infrastructure.Persistence;
@@ -27,39 +29,49 @@ namespace HiveMind.Infrastructure.Extensions
       else
         services.Configure<SimulationSettings>(options => { }); // Use defaults
 
-      // Add simulation logging
+      // Add logging infrastructure and ensure it's available
+      services.AddLogging(builder =>
+      {
+        if (configuration != null)
+          builder.AddConfiguration(configuration.GetSection("Logging"));
+
+        builder.AddConsole();
+        builder.AddDebug();
+      });
+
+      // Register environment factory
+      services.AddSingleton<IEnvironmentFactory, EnvironmentFactory>();
+
+      // Add simulation-specific logging
       services.AddSingleton<SimulationLoggerProvider>();
-      services.AddLogging();
 
       // Add persistence services
       services.AddSingleton<ISimulationPersistence>(provider =>
       {
-        SimulationSettings settings = provider.GetService<IOptions<SimulationSettings>>()?.Value ?? new SimulationSettings();
-        ILogger<FileSystemPersistence>? logger = provider.GetService<ILogger<FileSystemPersistence>>();
+        IOptions<SimulationSettings>? settingOptions = provider.GetService<IOptions<SimulationSettings>>();
+        SimulationSettings settings = settingOptions?.Value ?? new SimulationSettings();
 
-        var snapshotsPath = !string.IsNullOrEmpty(settings.SnapshotsPath)
+        // Use GetRequiredService to ensure logger is available
+        ILoggerFactory loggerFactory = provider.GetRequiredService<ILoggerFactory>();
+        ILogger<FileSystemPersistence> logger = loggerFactory.CreateLogger<FileSystemPersistence>();
+
+        string snapshotsPath = !string.IsNullOrEmpty(settings.SnapshotsPath)
           ? settings.SnapshotsPath
           : Path.Combine(GetFolderPath(SpecialFolder.LocalApplicationData), "HiveMind", "Snapshots");
 
-        return new FileSystemPersistence(snapshotsPath, logger);
+        return new FileSystemPersistence(logger, snapshotsPath);
       });
 
-      // Add data exports services
-      services.AddTransient<IDataExporter, SimulationDataExporter>();
+      // Add data export services
+      services.AddSingleton<IPerformanceMonitor>(provider =>
+      {
+        ILoggerFactory loggerFactory = provider.GetRequiredService<ILoggerFactory>();
+        ILogger<SimulationPerformanceMonitor> logger = loggerFactory.CreateLogger<SimulationPerformanceMonitor>();
 
-      // Add performance monitoring
-      services.AddSingleton<IPerformanceMonitor, SimulationPerformanceMonitor>();
+        return new SimulationPerformanceMonitor(logger);
+      });
 
       return services;
-    }
-
-    /// <summary>
-    /// Adds HiveMind infrastructure with custom configuration
-    /// </summary>
-    public static IServiceCollection AddHiveMindInfrastructure(this IServiceCollection services, Action<SimulationSettings> configureSettings)
-    {
-      services.Configure(configureSettings);
-      return services.AddHiveMindInfrastructure();
     }
 
     /// <summary>
@@ -67,12 +79,48 @@ namespace HiveMind.Infrastructure.Extensions
     /// </summary>
     public static IServiceCollection AddHiveMindInfrastructure(this IServiceCollection services, string snapshotsPath)
     {
+      if (string.IsNullOrWhiteSpace(snapshotsPath))
+        throw new ArgumentException("Snapshots path cannot be null or empty", nameof(snapshotsPath));
+
       services.Configure<SimulationSettings>(options =>
       {
         options.SnapshotsPath = snapshotsPath;
       });
 
       return services.AddHiveMindInfrastructure();
+    }
+
+    /// <summary>
+    /// Validates that all required services are properly registered
+    /// </summary>
+    public static void ValidateHiveMindServices(this IServiceProvider serviceProvider)
+    {
+      Type[] requiredServices =
+      [
+        typeof(ISimulationPersistence),
+        typeof(IDataExporter),
+        typeof(IPerformanceMonitor),
+        typeof(SimulationLoggerProvider),
+        typeof(ILoggerFactory)
+      ];
+
+      List<Type> missingServices = [];
+      foreach (Type serviceType in requiredServices)
+      {
+        try
+        {
+          object service = serviceProvider.GetRequiredService(serviceType);
+          if (service == null)
+            missingServices.Add(serviceType);
+        }
+        catch (InvalidOperationException)
+        {
+          missingServices.Add(serviceType);
+        }
+      }
+
+      if (missingServices.Count > 0)
+        throw new InvalidOperationException($"The following required services are not registered: {string.Join(", ", missingServices.Select(t => t.Name))}");
     }
   }
 }
