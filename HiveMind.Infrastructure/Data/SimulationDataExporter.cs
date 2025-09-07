@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using HiveMind.Core.Domain.Entities;
+using HiveMind.Core.Domain.Interfaces;
+using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
 
@@ -37,30 +39,27 @@ namespace HiveMind.Infrastructure.Data
           return filePath;
         }
 
-        // Assuming statistics are SimulationStatistics objects
+        // Write CSV header
         csv.AppendLine("Tick,Population,ActiveColonies,TotalFood,AvgEnergy,Deaths,Births");
 
         foreach (object stat in statsArray)
         {
-          string json = JsonSerializer.Serialize(stat, _jsonOptions);
-          Dictionary<string, object>? statDict = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
-
-          if (statDict != null)
+          try
           {
-            string line = $"{statDict.GetValueOrDefault("currentTick", 0)}," +
-              $"{statDict.GetValueOrDefault("totalPopulation", 0)}," +
-              $"{statDict.GetValueOrDefault("activeColonies", 0)}," +
-              $"{statDict.GetValueOrDefault("totalFoodStored", 0)}," +
-              $"{statDict.GetValueOrDefault("avgEnergyLevel", 0)}," +
-              $"{statDict.GetValueOrDefault("deathCount", 0)}," +
-              $"{statDict.GetValueOrDefault("birthCount", 0)}";
-
-            csv.AppendLine(line);
+            // Handle different types of statistics objects
+            var csvLine = ConvertStatisticToCsvLine(stat);
+            if (!string.IsNullOrEmpty(csvLine))
+              csv.AppendLine(csvLine);
+          }
+          catch (Exception ex)
+          {
+            _logger.LogWarning(ex, "Failed to process statistic entry of type {Type}", stat.GetType().Name);
+            continue; // Continue processing other entries
           }
         }
 
         await File.WriteAllTextAsync(filePath, csv.ToString());
-        _logger.LogInformation("Exported statistics to CSV: {FilePath}", filePath);
+        _logger.LogInformation("Exported {Count} statistics entries to CSV: {FilePath}", statsArray.Length, filePath);
 
         return filePath;
       }
@@ -75,9 +74,24 @@ namespace HiveMind.Infrastructure.Data
     {
       try
       {
-        string json = JsonSerializer.Serialize(colonyData, _jsonOptions);
-        await File.WriteAllTextAsync(filePath, json);
+        string json;
 
+        if (colonyData is IColony colony)
+        {
+          // Convert to exportable format
+          var exportData = ConvertColonyToExportFormat(colony);
+          json = JsonSerializer.Serialize(exportData, _jsonOptions);
+        }
+        else if (colonyData is IEnumerable<IColony> colonies)
+        {
+          // Handle multiple colonies
+          var exportData = colonies.Select(ConvertColonyToExportFormat).ToList();
+          json = JsonSerializer.Serialize(exportData, _jsonOptions);
+        }
+        else // Fallback to generic serialization
+          json = JsonSerializer.Serialize(colonyData, _jsonOptions);
+
+        await File.WriteAllTextAsync(filePath, json);
         _logger.LogInformation("Exported colony data to JSON: {FilePath}", filePath);
 
         return filePath;
@@ -96,7 +110,7 @@ namespace HiveMind.Infrastructure.Data
         return format.ToLower() switch
         {
           "json" => await ExportColonyDataToJsonAsync(populationData, filePath),
-          "csv" => await ExportPopulationToCsvAsync(filePath),
+          "csv" => await ExportPopulationToCsvAsync(populationData, filePath),
           _ => throw new ArgumentException($"Unsupported format: {format}"),
         };
       }
@@ -107,21 +121,242 @@ namespace HiveMind.Infrastructure.Data
       }
     }
 
-    private static async Task<string> ExportPopulationToCsvAsync(string filePath)
+    /// <summary>
+    /// Exports population data to CSV
+    /// </summary>
+    private async Task<string> ExportPopulationToCsvAsync(object populationData, string filePath)
     {
       StringBuilder csv = new();
-      csv.AppendLine("Role,Count,AvgEnergy,AvgAge");
+      csv.AppendLine("Role,Count,AvgAge,AvgHealth,AvgEnergy,TotalFood");
 
-      // This would need to be implemented based on the actual structure of populationData
-      // For now, just create a placeholder
-      csv.AppendLine("Queen,1,85.5,150");
-      csv.AppendLine("Worker,25,42.3,45");
-      csv.AppendLine("Forager,15,38.7,35");
-      csv.AppendLine("Soldier,8,55.2,65");
+      try
+      {
+        var populationStats = ProcessPopulationData(populationData);
+        if (populationStats.Count == 0)
+          csv.AppendLine("No population data available");
+        else
+          foreach (var stat in populationStats.OrderBy(s => s.Role))
+            csv.AppendLine($"{stat.Role},{stat.Count},{stat.AvgAge:F0},{stat.AvgHealth:F1},{stat.AvgEnergy:F1},{stat.TotalFood:F1}");
 
-      await File.WriteAllTextAsync(filePath, csv.ToString());
+        await File.WriteAllTextAsync(filePath, csv.ToString());
+        _logger.LogInformation("Exported population data to CSV: {FilePath} ({Count} roles)", filePath, populationStats.Count);
 
-      return filePath;
+        return filePath;
+      }
+      catch (Exception ex)
+      {
+        _logger.LogError(ex, "Failed to process population data for CSV export");
+
+        // Fallback with error message
+        csv.Clear();
+        csv.AppendLine("Role,Count,AvgEnergy,AvgAge,AvgHealth,TotalFood");
+        csv.AppendLine($"Error,0,0,0,0,0  # Failed to process data: {ex.Message}");
+
+        await File.WriteAllTextAsync(filePath, csv.ToString());
+
+        return filePath;
+      }
+    }
+
+    /// <summary>
+    /// Exports population data to JSON format
+    /// </summary>
+    private async Task<string> ExportPopulationToJsonAsync(object populationData, string filePath)
+    {
+      try
+      {
+        var populationStats = ProcessPopulationData(populationData);
+        var exportData = new
+        {
+          ExportTime = DateTime.UtcNow,
+          TotalPopulation = populationStats.Sum(s => s.Count),
+          PopulationByRole = populationStats.ToDictionary(s => s.Role, s => new
+          {
+            s.Count,
+            s.AvgAge,
+            s.AvgHealth,
+            s.AvgEnergy,
+            s.TotalFood
+          }),
+        };
+
+        var json = JsonSerializer.Serialize(exportData, _jsonOptions);
+        await File.WriteAllTextAsync(filePath, json);
+        _logger.LogInformation("Exported population data to JSON: {FilePath}", filePath);
+
+        return filePath;
+      }
+      catch (Exception ex)
+      {
+        _logger.LogError(ex, "Failed to export population data to JSON");
+        throw;
+      }
+    }
+
+    /// <summary>
+    /// Processes various types of population data into standardized statistics
+    /// </summary>
+    private static List<PopulationRoleStatistic> ProcessPopulationData(object populationData)
+    {
+      return populationData switch
+      {
+        // Handle single colony
+        IColony colony => ProcessColonyPopulation(colony),
+
+        // Handle collection of colonies
+        IEnumerable<IColony> colonies => ProcessMultipleColoniesPopulation(colonies),
+
+        // Handle collection of ants directly
+        IEnumerable<Ant> ants => ProcessAntsPopulation(ants),
+
+        // Handle collection of insects (more generic)
+        IEnumerable<IInsect> insects => ProcessInsectsPopulation(insects),
+
+        // Handle dictionary format (e.g., from SimulationStatistics)
+        IDictionary<string, int> roleCountDict => ProcessRoleDictionary(roleCountDict),
+
+        // Try JSON deserialization as fallback
+        string jsonString => ProcessJsonPopulationData(jsonString),
+
+        _ => throw new ArgumentException($"Unsupported population data type: {populationData.GetType().Name}")
+      };
+    }
+
+    private static List<PopulationRoleStatistic> ProcessColonyPopulation(IColony colony)
+    {
+      var ants = colony.Members.OfType<Ant>().Where(ant => ant.IsAlive).ToList();
+
+      return ProcessAntsPopulation(ants);
+    }
+
+    private static List<PopulationRoleStatistic> ProcessMultipleColoniesPopulation(IEnumerable<IColony> colonies)
+    {
+      var allAnts = colonies.SelectMany(c => c.Members).OfType<Ant>().Where(ant => ant.IsAlive).ToList();
+
+      return ProcessAntsPopulation(allAnts);
+    }
+
+    private static List<PopulationRoleStatistic> ProcessAntsPopulation(IEnumerable<Ant> ants) =>
+      [.. ants.GroupBy(ant => ant.Role).Select(roleGroup => new PopulationRoleStatistic
+      {
+        Role = roleGroup.Key.ToString(),
+        Count = roleGroup.Count(),
+        AvgAge = roleGroup.Average(ant => ant.Age),
+        AvgHealth = roleGroup.Average(ant => ant.Health),
+        AvgEnergy = roleGroup.Average(ant => ant.Energy),
+        TotalFood = roleGroup.Sum(ant => ant.CarriedFood)
+      })];
+
+    private static List<PopulationRoleStatistic> ProcessInsectsPopulation(IEnumerable<IInsect> insects)
+    {
+      var ants = insects.OfType<Ant>().Where(Ant => Ant.IsAlive);
+
+      return ProcessAntsPopulation(ants);
+    }
+
+    private static List<PopulationRoleStatistic> ProcessRoleDictionary(IDictionary<string, int> roleCountDict) =>
+      // Limited information available - only counts
+      [.. roleCountDict.Select(kvp => new PopulationRoleStatistic
+      {
+        Role = kvp.Key,
+        Count = kvp.Value,
+        AvgAge = 0, // Not available
+        AvgHealth = 0, // Not available
+        AvgEnergy = 0, // Not available
+        TotalFood = 0 // Not available
+      })];
+
+    private static List<PopulationRoleStatistic> ProcessJsonPopulationData(string jsonString)
+    {
+      try
+      {
+        // Try to deserialize as dictionary first
+        var dict = JsonSerializer.Deserialize<Dictionary<string, int>>(jsonString);
+        if (dict != null)
+          return ProcessRoleDictionary(dict);
+
+        // Could add more JSON format handling here
+        return [];
+      }
+      catch
+      {
+        return [];
+      }
+    }
+
+    private static string ConvertStatisticToCsvLine(object statistic)
+    {
+      // Handle different statistic object types
+      if (statistic is IDictionary<string, object> dict)
+        return $"{GetValue(dict, "currentTick", "tick", "tickNumber")}," +
+          $"{GetValue(dict, "totalPopulation", "population")}," +
+          $"{GetValue(dict, "activeColonies", "colonies")}," +
+          $"{GetValue(dict, "totalFoodStored", "totalFood", "food")}," +
+          $"{GetValue(dict, "avgEnergyLevel", "avgEnergy", "energy")}," +
+          $"{GetValue(dict, "deathCount", "deaths")}," +
+          $"{GetValue(dict, "birthCount", "births")}," +
+          $"{GetValue(dict, "simulationTimeElapsed", "timeElapsed", "elapsed")}";
+
+      // Try JSON serialization and conversion
+      try
+      {
+        var json = JsonSerializer.Serialize(statistic);
+        var dictionary = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+        if (dictionary != null)
+          return ConvertStatisticToCsvLine(dictionary);
+      }
+      catch
+      {
+        return statistic.ToString() ?? ""; // Fallback - return object's string representation
+      }
+
+      return "";
+    }
+
+    private static string GetValue(IDictionary<string, object> dict, params string[] keys)
+    {
+      foreach (var key in keys)
+        if (dict.TryGetValue(key, out var value))
+          return value?.ToString() ?? "0";
+
+      return "0";
+    }
+
+    private object ConvertColonyToExportFormat(IColony colony) =>
+      new
+      {
+        colony.Id,
+        colony.ColonyType,
+        colony.CenterPosition,
+        colony.Population,
+        colony.TotalFoodStored,
+        colony.IsActive,
+        ExportTime = DateTime.UtcNow,
+        Members = colony.Members.OfType<Ant>().Select(ant => new
+        {
+          ant.Id,
+          ant.Role,
+          ant.Position,
+          ant.CurrentState,
+          ant.Health,
+          ant.Energy,
+          ant.Age,
+          ant.IsAlive,
+          ant.CarriedFood
+        }).ToList()
+      };
+
+    /// <summary>
+    /// Statistics for a population role
+    /// </summary>
+    private class PopulationRoleStatistic
+    {
+      public string Role { get; set; } = "";
+      public int Count { get; set; }
+      public double AvgAge { get; set; }
+      public double AvgHealth { get; set; }
+      public double AvgEnergy { get; set; }
+      public double TotalFood { get; set; }
     }
   }
 }
