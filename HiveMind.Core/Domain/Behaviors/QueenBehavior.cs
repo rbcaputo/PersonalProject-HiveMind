@@ -18,52 +18,48 @@ namespace HiveMind.Core.Domain.Behaviors
     {
       SafeUpdate(ant, context, (a, ctx) =>
       {
-        // Queens primarily stay near the nest center and reproduce
-        if (a.Energy < a.MaxEnergy * 0.5)
-        {
-          // Rest to restore energy
-          SafeSetState(a, ActivityState.Resting);
-          SafeRestoreEnergy(a, 2.0);
-        }
-        else if (ctx.CurrentTick - _lastReproduction >= _reproductionInterval)
-        {
-          // Reproduction cycle
-          SafeSetState(a, ActivityState.Caring);
-          _lastReproduction = ctx.CurrentTick;
-        }
+        if (ShouldRest(a))
+          HandleRest(a);
+        else if (ShouldReproduce(ctx))
+          HandleReproduction(a, ctx);
         else
-          // Idle behavior - minimal movement
-          PerformIdleBehavior(a, ctx);
+          HandleIdleBehavior(a, ctx);
       });
     }
 
-    private void PerformIdleBehavior(Ant ant, ISimulationContext context)
+    private static bool ShouldRest(Ant ant) =>
+      ant.Energy < ant.MaxEnergy * 0.5;
+
+    private static void HandleRest(Ant ant)
     {
-      try
+      SafeSetState(ant, ActivityState.Resting);
+      SafeRestoreEnergy(ant, 2.0);
+    }
+
+    private bool ShouldReproduce(ISimulationContext context) =>
+      context.CurrentTick - _lastReproduction >= _reproductionInterval;
+
+    private void HandleReproduction(Ant ant, ISimulationContext context)
+    {
+      SafeSetState(ant, ActivityState.Caring);
+      _lastReproduction = context.CurrentTick;
+    }
+
+    private void HandleIdleBehavior(Ant ant, ISimulationContext context)
+    {
+      // 5% chance to move slightly
+      if (context.Random.NextDouble() < 0.05)
       {
-        if (!ValidateInputs(ant, context))
-          return;
+        Position currentPos = ant.Position;
+        double deltaX = (context.Random.NextDouble() - 0.5) * _maxMovementDistance;
+        double deltaY = (context.Random.NextDouble() - 0.5) * _maxMovementDistance;
 
-        // 5% chance to move slightly
-        if (context.Random.NextDouble() < 0.05)
-        {
-          Position currentPos = ant.Position;
-          double deltaX = (context.Random.NextDouble() - 0.5) * _maxMovementDistance;
-          double deltaY = (context.Random.NextDouble() - 0.5) * _maxMovementDistance;
-
-          Position newPosition = new(currentPos.X + deltaX, currentPos.Y + deltaY);
-          // Only move if the new position is valid
-          if (newPosition.IsValid && context.Environment.IsValidPosition(newPosition))
-            SafeMoveTo(ant, newPosition, context);
-        }
-        else
-          SafeSetState(ant, ActivityState.Idle);
+        Position newPosition = new(currentPos.X + deltaX, currentPos.Y + deltaY);
+        if (newPosition.IsValid && context.Environment.IsValidPosition(newPosition))
+          SafeMoveTo(ant, newPosition, context);
       }
-      catch (Exception ex)
-      {
-        HandleBehaviorError(ant, ex, nameof(PerformIdleBehavior));
+      else
         SafeSetState(ant, ActivityState.Idle);
-      }
     }
   }
 }
