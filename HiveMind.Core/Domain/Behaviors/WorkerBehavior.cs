@@ -8,62 +8,99 @@ namespace HiveMind.Core.Domain.Behaviors
   /// <summary>
   /// Behavior for worker ants - focused on nest maintenance and general tasks
   /// </summary>
-  public class WorkerBehavior : IAntBehavior
+  public class WorkerBehavior : BaseBehavior
   {
     private Position? _workTarget;
     private long _lastTaskSwitch = 0;
     private readonly int _taskSwitchInterval = 200;
+    private readonly double _workRadius = 15.0;
 
-    public void Update(Ant ant, ISimulationContext context)
+    public override void Update(Ant ant, ISimulationContext context)
     {
-      // Check if ant needs rest
-      if (ant.Energy < ant.MaxEnergy * 0.2)
+      SafeUpdate(ant, context, (a, ctx) =>
       {
-        ant.SetState(ActivityState.Resting);
-        ant.RestoreEnergy(1.5);
+        // Check if ant needs rest
+        if (a.Energy < a.MaxEnergy * 0.2)
+        {
+          SafeSetState(a, ActivityState.Resting);
+          SafeRestoreEnergy(a, 1.5);
 
-        return;
-      }
+          return;
+        }
 
-      // Switch tasks periodically
-      if (context.CurrentTick - _lastTaskSwitch >= _taskSwitchInterval || ant.CurrentState == ActivityState.Idle)
-      {
-        AssignNewTask(ant, context);
-        _lastTaskSwitch = context.CurrentTick;
-      }
+        // Switch tasks periodically or when idle
+        if (ctx.CurrentTick - _lastTaskSwitch >= _taskSwitchInterval || a.CurrentState == ActivityState.Idle)
+        {
+          AssignNewTask(a, ctx);
+          _lastTaskSwitch = ctx.CurrentTick;
+        }
 
-      ExecuteCurrentTask(ant);
+        ExecuteCurrentTask(a, ctx);
+      });
     }
 
     private void AssignNewTask(Ant ant, ISimulationContext context)
     {
-      double random = context.Random.NextDouble();
+      try
+      {
+        if (!ValidateInputs(ant, context))
+          return;
 
-      if (random < 0.6) // 60% chance to build/maintain
-      {
-        ant.SetState(ActivityState.Building);
-        _workTarget = GetRandomPositionNearNest(ant, context, 10.0);
+        double random = context.Random.NextDouble();
+        Position? nestPosition = GetSafeNestPosition(ant);
+        if (nestPosition == null)
+        {
+          // No nest available - default to idle
+          SafeSetState(ant, ActivityState.Idle);
+
+          return;
+        }
+
+        if (random < 6.0) // 60% chance to build/maintain
+        {
+          SafeSetState(ant, ActivityState.Building);
+          _workTarget = GenerateSafePosition(nestPosition.Value, _workRadius * 0.67, context); // Stay closer for building
+        }
+        else if (random < 0.8) // 20% chance to care for young
+        {
+          SafeSetState(ant, ActivityState.Caring);
+          _workTarget = GenerateSafePosition(nestPosition.Value, _workRadius * 0.33, context); // Stay very close for caring
+        }
+        else // 20% chance to patrol
+        {
+          SafeSetState(ant, ActivityState.Moving);
+          _workTarget = GenerateSafePosition(nestPosition.Value, _workRadius, context); // Full range for patrol
+        }
+
+        // Fallback if position generation failed
+        if (_workTarget == null)
+          _workTarget = nestPosition;
       }
-      else if (random < 0.8) // 20% chance to care for young
+      catch (Exception ex)
       {
-        ant.SetState(ActivityState.Caring);
-        _workTarget = GetRandomPositionNearNest(ant, context, 5.0);
-      }
-      else // 20% chance to patrol
-      {
-        ant.SetState(ActivityState.Moving);
-        _workTarget = GetRandomPositionNearNest(ant, context, 15.0);
+        HandleBehaviorError(ant, ex, nameof(AssignNewTask));
+        ResetTaskState(ant);
       }
     }
 
-    private void ExecuteCurrentTask(Ant ant)
+    private void ExecuteCurrentTask(Ant ant, ISimulationContext context)
     {
-      if (_workTarget.HasValue)
+      try
       {
-        double distanceToTarget = ant.Position.DistanceTo(_workTarget.Value);
+        if (!ValidateInputs(ant, context) || !_workTarget.HasValue)
+          return;
 
-        if (distanceToTarget > 1.0)
-          ant.MoveTo(_workTarget.Value);
+        double distanceToTarget = SafeCalculateDistance(ant.Position, _workTarget.Value);
+        if (distanceToTarget > 1.0 && distanceToTarget != double.MaxValue)
+        {
+          // Move towards target
+          if (!SafeMoveTo(ant, _workTarget.Value, context))
+          {
+            // Movement failed - reassign task
+            _workTarget = null;
+            return;
+          }
+        }
         else
         {
           // Arrived at target, perform task
@@ -71,25 +108,63 @@ namespace HiveMind.Core.Domain.Behaviors
           _workTarget = null;
         }
       }
+      catch (Exception ex)
+      {
+        HandleBehaviorError(ant, ex, nameof(ExecuteCurrentTask));
+        ResetTaskState(ant);
+      }
     }
 
     private static void PerformTaskAtLocation(Ant ant)
     {
-      switch (ant.CurrentState)
+      try
       {
-        case ActivityState.Building:
-          ant.ConsumeEnergy(0.5);
-          break;
-        case ActivityState.Caring:
-          ant.ConsumeEnergy(0.3);
-          break;
-        default:
-          ant.ConsumeEnergy(0.2);
-          break;
-      }
+        if (!IsAntOperational(ant))
+          return;
 
-      // After completing task, brief idle period
-      ant.SetState(ActivityState.Idle);
+        bool energyConsumed = false;
+
+        switch (ant.CurrentState)
+        {
+          case ActivityState.Building:
+            energyConsumed = SafeConsumeEnergy(ant, 0.5);
+            break;
+          case ActivityState.Caring:
+            energyConsumed = SafeConsumeEnergy(ant, 0.3);
+            break;
+          case ActivityState.Moving:
+            energyConsumed = SafeConsumeEnergy(ant, 0.2);
+            break;
+          default:
+            energyConsumed = SafeConsumeEnergy(ant, 0.1);
+            break;
+        }
+        ;
+
+        // Set to idle after completing task (if energy consumption succeeded)
+        if (energyConsumed)
+          SafeSetState(ant, ActivityState.Idle);
+      }
+      catch (Exception ex)
+      {
+        HandleBehaviorError(ant, ex, nameof(PerformTaskAtLocation));
+      }
+    }
+
+    /// <summary>
+    /// Resets task state to safe defaults
+    /// </summary>
+    private void ResetTaskState(Ant ant)
+    {
+      try
+      {
+        _workTarget = null;
+        SafeSetState(ant, ActivityState.Idle);
+      }
+      catch
+      {
+        _workTarget = null; // Ultimate fallback - clear work target at minimum
+      }
     }
 
     private static Position GetRandomPositionNearNest(Ant ant, ISimulationContext context, double radius)

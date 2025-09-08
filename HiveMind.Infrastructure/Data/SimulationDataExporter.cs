@@ -47,7 +47,7 @@ namespace HiveMind.Infrastructure.Data
           try
           {
             // Handle different types of statistics objects
-            var csvLine = ConvertStatisticToCsvLine(stat);
+            string csvLine = ConvertStatisticToCsvLine(stat);
             if (!string.IsNullOrEmpty(csvLine))
               csv.AppendLine(csvLine);
           }
@@ -79,13 +79,13 @@ namespace HiveMind.Infrastructure.Data
         if (colonyData is IColony colony)
         {
           // Convert to exportable format
-          var exportData = ConvertColonyToExportFormat(colony);
+          object exportData = ConvertColonyToExportFormat(colony);
           json = JsonSerializer.Serialize(exportData, _jsonOptions);
         }
         else if (colonyData is IEnumerable<IColony> colonies)
         {
           // Handle multiple colonies
-          var exportData = colonies.Select(ConvertColonyToExportFormat).ToList();
+          List<object> exportData = [.. colonies.Select(ConvertColonyToExportFormat)];
           json = JsonSerializer.Serialize(exportData, _jsonOptions);
         }
         else // Fallback to generic serialization
@@ -131,7 +131,7 @@ namespace HiveMind.Infrastructure.Data
 
       try
       {
-        var populationStats = ProcessPopulationData(populationData);
+        List<PopulationRoleStatistic> populationStats = ProcessPopulationData(populationData);
         if (populationStats.Count == 0)
           csv.AppendLine("No population data available");
         else
@@ -165,8 +165,8 @@ namespace HiveMind.Infrastructure.Data
     {
       try
       {
-        var populationStats = ProcessPopulationData(populationData);
-        var exportData = new
+        List<PopulationRoleStatistic> populationStats = ProcessPopulationData(populationData);
+        object exportData = new
         {
           ExportTime = DateTime.UtcNow,
           TotalPopulation = populationStats.Sum(s => s.Count),
@@ -180,7 +180,7 @@ namespace HiveMind.Infrastructure.Data
           }),
         };
 
-        var json = JsonSerializer.Serialize(exportData, _jsonOptions);
+        string json = JsonSerializer.Serialize(exportData, _jsonOptions);
         await File.WriteAllTextAsync(filePath, json);
         _logger.LogInformation("Exported population data to JSON: {FilePath}", filePath);
 
@@ -224,14 +224,14 @@ namespace HiveMind.Infrastructure.Data
 
     private static List<PopulationRoleStatistic> ProcessColonyPopulation(IColony colony)
     {
-      var ants = colony.Members.OfType<Ant>().Where(ant => ant.IsAlive).ToList();
+      List<Ant> ants = [.. colony.Members.OfType<Ant>().Where(ant => ant.IsAlive)];
 
       return ProcessAntsPopulation(ants);
     }
 
     private static List<PopulationRoleStatistic> ProcessMultipleColoniesPopulation(IEnumerable<IColony> colonies)
     {
-      var allAnts = colonies.SelectMany(c => c.Members).OfType<Ant>().Where(ant => ant.IsAlive).ToList();
+      List<Ant> allAnts = [.. colonies.SelectMany(c => c.Members).OfType<Ant>().Where(ant => ant.IsAlive)];
 
       return ProcessAntsPopulation(allAnts);
     }
@@ -249,7 +249,7 @@ namespace HiveMind.Infrastructure.Data
 
     private static List<PopulationRoleStatistic> ProcessInsectsPopulation(IEnumerable<IInsect> insects)
     {
-      var ants = insects.OfType<Ant>().Where(Ant => Ant.IsAlive);
+      IEnumerable<Ant> ants = insects.OfType<Ant>().Where(Ant => Ant.IsAlive);
 
       return ProcessAntsPopulation(ants);
     }
@@ -271,7 +271,7 @@ namespace HiveMind.Infrastructure.Data
       try
       {
         // Try to deserialize as dictionary first
-        var dict = JsonSerializer.Deserialize<Dictionary<string, int>>(jsonString);
+        Dictionary<string, int>? dict = JsonSerializer.Deserialize<Dictionary<string, int>>(jsonString);
         if (dict != null)
           return ProcessRoleDictionary(dict);
 
@@ -300,8 +300,8 @@ namespace HiveMind.Infrastructure.Data
       // Try JSON serialization and conversion
       try
       {
-        var json = JsonSerializer.Serialize(statistic);
-        var dictionary = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+        string json = JsonSerializer.Serialize(statistic);
+        Dictionary<string, object>? dictionary = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
         if (dictionary != null)
           return ConvertStatisticToCsvLine(dictionary);
       }
@@ -315,8 +315,8 @@ namespace HiveMind.Infrastructure.Data
 
     private static string GetValue(IDictionary<string, object> dict, params string[] keys)
     {
-      foreach (var key in keys)
-        if (dict.TryGetValue(key, out var value))
+      foreach (string key in keys)
+        if (dict.TryGetValue(key, out object? value))
           return value?.ToString() ?? "0";
 
       return "0";

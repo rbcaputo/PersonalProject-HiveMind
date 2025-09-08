@@ -8,38 +8,61 @@ namespace HiveMind.Core.Domain.Behaviors
   /// <summary>
   /// Behavior for the queen ant - focused on reproduction and colony management
   /// </summary>
-  public class QueenBehavior : IAntBehavior
+  public class QueenBehavior : BaseBehavior
   {
     private long _lastReproduction = 0;
     private readonly int _reproductionInterval = 100;
+    private readonly double _maxMovementDistance = 2.0; // Queens move very little
 
-    public void Update(Ant ant, ISimulationContext context)
+    public override void Update(Ant ant, ISimulationContext context)
     {
-      // Queens primarily stay near the nest center and reproduce
-      if (ant.Energy < ant.MaxEnergy * 0.5)
+      SafeUpdate(ant, context, (a, ctx) =>
       {
-        // Rest to restore energy
-        ant.SetState(ActivityState.Resting);
-        ant.RestoreEnergy(2.0);
-      }
-      else if (context.CurrentTick - _lastReproduction >= _reproductionInterval)
-      {
-        // Reproduction cycle
-        ant.SetState(ActivityState.Caring);
-        _lastReproduction = context.CurrentTick;
-      }
-      else
-      {
-        // Idle behavior - minimal movement
-        if (context.Random.NextDouble() < 0.05) // 5% chance to move slightly
+        // Queens primarily stay near the nest center and reproduce
+        if (a.Energy < a.MaxEnergy * 0.5)
         {
-          Position currentPos = ant.Position;
-          double newX = currentPos.X + (context.Random.NextDouble() - 0.5) * 2;
-          double newY = currentPos.Y + (context.Random.NextDouble() - 0.5) * 2;
-          ant.MoveTo(new Position(newX, newY));
+          // Rest to restore energy
+          SafeSetState(a, ActivityState.Resting);
+          SafeRestoreEnergy(a, 2.0);
+        }
+        else if (ctx.CurrentTick - _lastReproduction >= _reproductionInterval)
+        {
+          // Reproduction cycle
+          SafeSetState(a, ActivityState.Caring);
+          _lastReproduction = ctx.CurrentTick;
         }
         else
-          ant.SetState(ActivityState.Idle);
+          // Idle behavior - minimal movement
+          PerformIdleBehavior(a, ctx);
+      });
+    }
+
+    private void PerformIdleBehavior(Ant ant, ISimulationContext context)
+    {
+      try
+      {
+        if (!ValidateInputs(ant, context))
+          return;
+
+        // 5% chance to move slightly
+        if (context.Random.NextDouble() < 0.05)
+        {
+          Position currentPos = ant.Position;
+          double deltaX = (context.Random.NextDouble() - 0.5) * _maxMovementDistance;
+          double deltaY = (context.Random.NextDouble() - 0.5) * _maxMovementDistance;
+
+          Position newPosition = new(currentPos.X + deltaX, currentPos.Y + deltaY);
+          // Only move if the new position is valid
+          if (newPosition.IsValid && context.Environment.IsValidPosition(newPosition))
+            SafeMoveTo(ant, newPosition, context);
+        }
+        else
+          SafeSetState(ant, ActivityState.Idle);
+      }
+      catch (Exception ex)
+      {
+        HandleBehaviorError(ant, ex, nameof(PerformIdleBehavior));
+        SafeSetState(ant, ActivityState.Idle);
       }
     }
   }
