@@ -35,7 +35,7 @@ namespace HiveMind.Core.Domain.Behaviors
     {
       try
       {
-        if (!pos1.IsValid || pos2.IsValid)
+        if (!pos1.IsValid || !pos2.IsValid)
           return double.MaxValue;
 
         return pos1.DistanceTo(pos2);

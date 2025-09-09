@@ -96,7 +96,7 @@ namespace HiveMind.Infrastructure.Environment
 
     private void ValidatePosition(Position position)
     {
-      if (position.IsValid)
+      if (!position.IsValid)
         throw new ArgumentException("Position contains invalid coordinates (NaN or Infinity)", nameof(position));
       if (!IsValidPosition(position))
         throw new ArgumentOutOfRangeException(nameof(position), $"Position {position} is outside environment bounds (0,0) to ({Width},{Height})");

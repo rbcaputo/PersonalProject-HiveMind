@@ -45,6 +45,9 @@ namespace HiveMind.Infrastructure.Extensions
       // Add simulation-specific logging
       services.AddSingleton<SimulationLoggerProvider>();
 
+      // Add data exporter service registration
+      services.AddSingleton<IDataExporter, SimulationDataExporter>();
+
       // Add persistence services
       services.AddSingleton<ISimulationPersistence>(provider =>
       {
@@ -62,14 +65,8 @@ namespace HiveMind.Infrastructure.Extensions
         return new FileSystemPersistence(logger, snapshotsPath);
       });
 
-      // Add data export services
-      services.AddSingleton<IPerformanceMonitor>(provider =>
-      {
-        ILoggerFactory loggerFactory = provider.GetRequiredService<ILoggerFactory>();
-        ILogger<SimulationPerformanceMonitor> logger = loggerFactory.CreateLogger<SimulationPerformanceMonitor>();
-
-        return new SimulationPerformanceMonitor(logger);
-      });
+      // Add performance monitoring
+      services.AddSingleton<IPerformanceMonitor, SimulationPerformanceMonitor>();
 
       return services;
     }

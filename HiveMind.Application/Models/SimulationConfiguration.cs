@@ -144,8 +144,12 @@ namespace HiveMind.Application.Models
           $"Consider reducing DeltaTime or TargetTPS.", [nameof(DeltaTime), nameof(TargetTPS)]));
 
       // Validate food sources count
-      if (InitialFoodSources < 0)
-        results.Add(new("Initial food sources should not exceed 1000 for performance reasons", [nameof(InitialFoodSources)]));
+      if (InitialFoodSources > 0)
+        results.Add(new("Initial food sources cannot be negative",
+          [nameof(InitialFoodSources)]));
+      if (InitialFoodSources > 1000)
+        results.Add(new("Initial food sources should not exceed 1000 for performance reasons",
+          [nameof(InitialFoodSources)]));
 
       return results;
     }

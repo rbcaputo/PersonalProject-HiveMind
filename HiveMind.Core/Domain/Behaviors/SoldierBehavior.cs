@@ -20,7 +20,7 @@ namespace HiveMind.Core.Domain.Behaviors
     protected override void AssignNewTask(Ant ant, ISimulationContext context)
     {
       // Check for threats first
-      if (DetectThreats(ant, context))
+      if (DetectThreats())
       {
         BehaviorTask fightTask = CreateTask(ActivityState.Fighting, 1.0);
         SetCurrentTask(fightTask);
@@ -50,7 +50,7 @@ namespace HiveMind.Core.Domain.Behaviors
         SafeSetState(ant, ActivityState.Idle);
     }
 
-    private bool DetectThreats(Ant ant, ISimulationContext context)
+    private bool DetectThreats()
     {
       // Simplified threat detection - would be expanded for multi-colony scenarios
       return false;

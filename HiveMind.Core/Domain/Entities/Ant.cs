@@ -31,11 +31,17 @@ namespace HiveMind.Core.Domain.Entities
 
     public Ant(AntRole role, Position startPosition, IAntBehavior behavior, IColony colony)
     {
+      if (!Enum.IsDefined(typeof(AntRole), role))
+        throw new ArgumentException($"Invalid ant role: {role}", nameof(role));
+      if (!startPosition.IsValid)
+        throw new ArgumentException("Start position must be valid", nameof(startPosition));
+
+      _behavior = behavior ?? throw new ArgumentNullException(nameof(behavior));
+      Colony = colony ?? throw new ArgumentNullException(nameof(colony));
+
       Role = role;
       Position = startPosition;
       _targetPosition = startPosition;
-      _behavior = behavior ?? throw new ArgumentNullException(nameof(behavior));
-      Colony = colony ?? throw new ArgumentNullException(nameof(colony));
 
       InitializeAttributes();
       CurrentState = ActivityState.Idle;
