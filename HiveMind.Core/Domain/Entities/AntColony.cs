@@ -12,7 +12,7 @@ namespace HiveMind.Core.Domain.Entities
   {
     private readonly Dictionary<Guid, Ant> _members = [];
     private readonly List<Position> _nestLocations = [centerPosition];
-    private readonly Dictionary<AntRole, List<Ant>> _roleCache = [];
+    private readonly Dictionary<AntCaste, List<Ant>> _roleCache = [];
     private long _lastCacheUpdate = -1;
     private bool _isInitialized = false;
 
@@ -22,7 +22,7 @@ namespace HiveMind.Core.Domain.Entities
     public int Population => _members.Count(kv => kv.Value.IsAlive);
     public double TotalFoodStored { get; private set; } = 100.0; // Starting food
     public bool IsActive => Population > 0 && HasQueen;
-    public bool HasQueen => _members.Values.Any(ant => ant.Role == AntRole.Queen && ant.IsAlive);
+    public bool HasQueen => _members.Values.Any(ant => ant.Role == AntCaste.Queen && ant.IsAlive);
 
     // Colony-specific properties
     public int MaxPopulation { get; private set; } = maxPopulation;
@@ -54,7 +54,7 @@ namespace HiveMind.Core.Domain.Entities
       }
     }
 
-    public IEnumerable<Ant> GetAntsByRole(AntRole role)
+    public IEnumerable<Ant> GetAntsByRole(AntCaste role)
     {
       // Update cache only when needed
       if (_lastCacheUpdate < LastUpdatedAt.Ticks)
@@ -107,7 +107,7 @@ namespace HiveMind.Core.Domain.Entities
           ant.Update(context);
 
           // Handle food collection inline
-          if (ant.Role == AntRole.Forager && ant.CarriedFood > 0)
+          if (ant.Role == AntCaste.Forager && ant.CarriedFood > 0)
           {
             double distanceToNest = ant.Position.DistanceTo(CenterPosition);
             if (distanceToNest < 2.0)
@@ -154,14 +154,14 @@ namespace HiveMind.Core.Domain.Entities
     private void InitializeColony(ISimulationContext context)
     {
       // Create queen
-      Ant queen = new(AntRole.Queen, CenterPosition, AntBehaviorFactory.CreateBehavior(AntRole.Queen), this);
+      Ant queen = new(AntCaste.Queen, CenterPosition, AntBehaviorFactory.CreateBehavior(AntCaste.Queen), this);
       AddMember(queen);
 
       // Create initial workers
       for (int i = 0; i < 10; i++)
       {
         Position position = GetRandomPositionNearCenter(5.0, context);
-        Ant worker = new(AntRole.Worker, position, AntBehaviorFactory.CreateBehavior(AntRole.Worker), this);
+        Ant worker = new(AntCaste.Worker, position, AntBehaviorFactory.CreateBehavior(AntCaste.Worker), this);
         AddMember(worker);
       }
 
@@ -169,7 +169,7 @@ namespace HiveMind.Core.Domain.Entities
       for (int i = 0; i < 5; i++)
       {
         Position position = GetRandomPositionNearCenter(3.0, context);
-        Ant forager = new(AntRole.Forager, position, AntBehaviorFactory.CreateBehavior(AntRole.Forager), this);
+        Ant forager = new(AntCaste.Forager, position, AntBehaviorFactory.CreateBehavior(AntCaste.Forager), this);
         AddMember(forager);
       }
     }
@@ -207,7 +207,7 @@ namespace HiveMind.Core.Domain.Entities
 
     private void SpawnNewAnt(ISimulationContext context)
     {
-      AntRole role = DetermineNewAntRole();
+      AntCaste role = DetermineNewAntRole();
       Position position = GetRandomPositionNearCenter(2.0, context);
 
       Ant newAnt = new(role, position, AntBehaviorFactory.CreateBehavior(role), this);
@@ -217,23 +217,23 @@ namespace HiveMind.Core.Domain.Entities
       ConsumeFood(10.0);
     }
 
-    private AntRole DetermineNewAntRole()
+    private AntCaste DetermineNewAntRole()
     {
-      int foragerCount = GetAntsByRole(AntRole.Forager).Count();
-      int soldierCount = GetAntsByRole(AntRole.Soldier).Count();
+      int foragerCount = GetAntsByRole(AntCaste.Forager).Count();
+      int soldierCount = GetAntsByRole(AntCaste.Soldier).Count();
 
       // Simple role distribution logic
       if (foragerCount < Population * 0.3)
-        return AntRole.Forager;
+        return AntCaste.Forager;
       if (soldierCount < Population * 0.1)
-        return AntRole.Soldier;
+        return AntCaste.Soldier;
 
-      return AntRole.Worker;
+      return AntCaste.Worker;
     }
 
     private void DispatchForagers()
     {
-      IEnumerable<Ant> idleForagers = GetAntsByRole(AntRole.Forager)
+      IEnumerable<Ant> idleForagers = GetAntsByRole(AntCaste.Forager)
         .Where(ant => ant.CurrentState == ActivityState.Idle)
         .Take(3);
 

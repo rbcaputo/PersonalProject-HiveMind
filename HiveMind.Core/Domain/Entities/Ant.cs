@@ -1,247 +1,350 @@
-﻿using HiveMind.Core.Domain.Common;
+﻿using HiveMind.Core.Domain.Behaviors;
+using HiveMind.Core.Domain.Common;
 using HiveMind.Core.Domain.Enums;
 using HiveMind.Core.Domain.Interfaces;
+using HiveMind.Core.ValueObjects;
+using static HiveMind.Core.ValueObjects.AntPhysiology;
 
 namespace HiveMind.Core.Domain.Entities
 {
-  /// <summary>
-  /// Represents an individual ant in the simulation
-  /// </summary>
-  public class Ant : BaseEntity, IInsect
+  // ================================================
+  //  Represents an individual ant in the simulation
+  // ================================================
+
+  public abstract class Ant : BaseEntity, IInsect
   {
-    public InsectType Type => InsectType.Ant;
-    public AntRole Role { get; private set; }
-    public Position Position { get; private set; }
-    public ActivityState CurrentState { get; private set; }
-    public double Health { get; private set; }
-    public double Energy { get; private set; }
-    public int Age { get; private set; }
-    public bool IsAlive => Health > 0;
-    public double CarriedFood { get; private set; }
-    public double MaxEnergy { get; private set; }
-    public double MaxHealth { get; private set; }
-    public double Speed { get; private set; }
-    public IColony Colony { get; private set; }
+    private double _health;
+    private double _energy;
+    private NutritionalStatus _nutritionalStatus = NutritionalStatus.Adequate;
 
-    private Position _targetPosition;
-    private readonly IAntBehavior _behavior;
-    private int _zeroEnergyTicks = 0;
-    private const int MAX_ZERO_ENERGY_TICKS = 10; // Allow 10 ticks of zero energy before health damage
-    private const double STARVATION_HEALTH_DAMAGE = 2.0; // Health damage per starvation cycle
-
-    public Ant(AntRole role, Position startPosition, IAntBehavior behavior, IColony colony)
+    protected Ant(
+      AntCaste caste,
+      Position startPosition,
+      IColony colony,
+      AntPhysiology? customPhysiology = null
+    )
     {
-      if (!Enum.IsDefined(typeof(AntRole), role))
-        throw new ArgumentException($"Invalid ant role: {role}", nameof(role));
-      if (!startPosition.IsValid)
-        throw new ArgumentException("Start position must be valid", nameof(startPosition));
-
-      _behavior = behavior ?? throw new ArgumentNullException(nameof(behavior));
+      Caste = caste;
+      Position = startPosition;
       Colony = colony ?? throw new ArgumentNullException(nameof(colony));
 
-      Role = role;
-      Position = startPosition;
-      _targetPosition = startPosition;
+      //  Initialize physiology - can be overridden by subclasses
+      Physiology = customPhysiology ?? CreateDefaultPhysiology();
 
-      InitializeAttributes();
-      CurrentState = ActivityState.Idle;
+      //  Initialize vitals based on physiology
+      MaxHealth = MaxEnergy = CalculateMaxVitals();
+      Health = MaxHealth;
+      Energy = MaxEnergy;
+
+      DevelopmentStage = DevelopmentStage.Egg;  //  Start as egg
+      BirthTick = 0;  //  Set by simulation context
+
     }
 
-    public void Update(ISimulationContext context)
+    //  Core properties
+    public InsectType Type => InsectType.Ant;
+    public AntCaste Caste { get; protected set; }
+    public Position Position { get; protected set; }
+    public ActivityState CurrentState { get; protected set; } = ActivityState.Idle;
+    public IColony Colony { get; }
+    public AntPhysiology Physiology { get; protected set; }
+
+    //  Vitals
+    public double Health
+    {
+      get => _health;
+      protected set => _health = Math.Max(0, Math.Min(MaxHealth, value));
+    }
+
+    public double Energy
+    {
+      get => _energy;
+      protected set
+      {
+        _energy = Math.Max(0, Math.Min(MaxEnergy, value));
+        UpdateNutritionalStatus();
+      }
+    }
+
+    public double MaxHealth { get; protected set; }
+    public double MaxEnergy { get; protected set; }
+    public bool IsAlive => Health > 0 && DevelopmentStage != DevelopmentStage.Dead;
+
+    //  Lifecyle properties
+    public DevelopmentStage DevelopmentStage { get; protected set; }
+    public long BirthTick { get; set; }
+    public int AgeDays => (int)((CurrentTick - BirthTick) / TicksPerDay);
+    public NutritionalStatus NutritionalStatus => _nutritionalStatus;
+
+    //  Carrying capacity
+    public double CarriedFood { get; protected set; }
+    public double MaxCarryingCapacity => Physiology.MaxCarryCapacity * GetBodyWeightMultiplier();
+
+    //  Abstract methods for subclass specialization
+    protected abstract AntPhysiology CreateDefaultPhysiology();
+    protected abstract double GetBodyWeightMultiplier();
+    protected abstract void OnDevelopmentStageChanged(DevelopmentStage newStage);
+
+    //  Metabolism and aging
+    public virtual void Update(ISimulationContext context)
     {
       if (!IsAlive)
         return;
 
-      // Age the ant
-      Age++;
+      CurrentTick = context.CurrentTick;
 
-      // Natural energy consumption
-      ConsumeEnergy(0.1);
+      //  Age-Based development
+      UpdateDevelopmentStage();
 
-      // Update behavior
-      _behavior.Update(this, context);
+      //  Metabolic processes
+      ProcessMetabolism(context.DeltaTime);
 
-      // Handle movement
-      UpdateMovement(context);
+      //  Stage-specific behaviors
+      if (DevelopmentStage >= DevelopmentStage.YoungAdult)
+      {
+        GetBehavior()?.Update(this, context);
+        ProcessMovement(context);
+      }
 
-      // Check for starvation and health effects
-      HandleStarvation();
-
-      // Check for death conditions
-      CheckVitals();
+      //  Health effects
+      ProcessAging();
+      ProcessEnvironmentalEffects(context);
 
       UpdateTimestamp();
     }
 
-    public void MoveTo(Position newPosition)
+    protected virtual void UpdateDevelopmentState()
     {
-      if (CurrentState == ActivityState.Dead)
-        return;
-
-      _targetPosition = newPosition;
-      CurrentState = ActivityState.Moving;
-    }
-
-    public void ConsumeEnergy(double amount)
-    {
-      if (!IsAlive)
-        return;
-
-      double previousEnergy = Energy;
-      Energy = Math.Max(0, Energy - amount);
-
-      // If energy hits zero, start tracking starvation
-      if (Energy == 0 && previousEnergy > 0)
-        _zeroEnergyTicks = 1;
-    }
-
-    public void RestoreEnergy(double amount)
-    {
-      if (!IsAlive)
-        return;
-
-      Energy = Math.Min(MaxEnergy, Energy + amount);
-
-      // Reset starvation counter when energy is restored
-      if (Energy > 0)
-        _zeroEnergyTicks = 0;
-    }
-
-    public bool IsStarving =>
-      Energy == 0 && _zeroEnergyTicks > 0;
-
-    public double HealthRatio =>
-      MaxHealth > 0
-        ? Energy / MaxHealth
-        : 0;
-
-    public double EnergyRatio =>
-      MaxEnergy > 0
-        ? Energy / MaxEnergy
-        : 0;
-
-    private void HandleStarvation()
-    {
-      if (Energy == 0)
+      var newStage = CalculateDevelopmentStage();
+      if (newStage != DevelopmentStage)
       {
-        _zeroEnergyTicks++;
+        var previousStage = DevelopmentStage;
+        DevelopmentStage = newStage;
+        OnDevelopmentStageChanged(newStage);
 
-        // Apply health damage after prolonged zero energy
-        if (_zeroEnergyTicks >= MAX_ZERO_ENERGY_TICKS)
+        //  Adjust vitals for new stage
+        if (newStage == DevelopmentStage.YoungAdult)
         {
-          Health = Math.Max(0, Health - STARVATION_HEALTH_DAMAGE);
-          _zeroEnergyTicks = 0; // Reset counter after applying damage
-
-          // Set starving state for behavior awareness
-          // Force rest when starving
-          if (CurrentState != ActivityState.Dead)
-            CurrentState = ActivityState.Resting;
-        }
-      }
-      else if (Energy < MaxEnergy * 0.1) // Very low energy (below 10%)
-      {
-        // Gradual health degradation from very low energy
-        if (Health > 0)
-        {
-          double healthLoss = 0.1 * (1.0 - Energy / (MaxEnergy * 0.1)); // More damage the lower the energy
-          Health = Math.Max(0, Health - healthLoss);
+          //  Full health and energy when becoming adult
+          Health = MaxHealth;
+          Energy = MaxEnergy;
         }
       }
     }
 
-    public void CollectFood(double amount) =>
-      CarriedFood += amount;
-
-    public double DropFood()
-    {
-      double dropped = CarriedFood;
-      CarriedFood = 0;
-
-      return dropped;
-    }
-
-    public void SetState(ActivityState newState) =>
-      CurrentState = newState;
-
-    private void InitializeAttributes()
-    {
-      // Role-based attribute initialization
-      switch (Role)
+    private DevelopmentStage CalculateDevelopmentState() =>
+      AgeDays switch
       {
-        case AntRole.Queen:
-          MaxHealth = MaxEnergy = 100;
-          Speed = 0.5;
-          break;
-        case AntRole.Worker:
-          MaxHealth = MaxEnergy = 80;
-          Speed = 1.2;
-          break;
-        case AntRole.Soldier:
-          MaxHealth = MaxEnergy = 90;
-          Speed = 1.0;
-          break;
-        case AntRole.Forager:
-          MaxHealth = MaxEnergy = 75;
-          Speed = 1.5;
-          break;
-        default:
-          MaxHealth = MaxEnergy = 70;
-          Speed = 1.0;
-          break;
-      }
-
-      Health = MaxHealth;
-      Energy = MaxEnergy;
-    }
-
-    private void UpdateMovement(ISimulationContext context)
-    {
-      if (CurrentState != ActivityState.Moving || Position.Equals(_targetPosition))
-        return;
-
-      double distance = Position.DistanceTo(_targetPosition);
-      double moveDistance = Speed * context.DeltaTime;
-
-      if (distance <= moveDistance)
-      {
-        Position = _targetPosition;
-        CurrentState = ActivityState.Idle;
-      }
-      else
-      {
-        double ratio = moveDistance / distance;
-        double deltaX = (_targetPosition.X - Position.X) * ratio;
-        double deltaY = (_targetPosition.Y - Position.Y) * ratio;
-        Position = Position.MoveTo(deltaX, deltaY);
-      }
-    }
-
-    private void CheckVitals()
-    {
-      int maxAge = GetMaxAge();
-
-      if (Health <= 0 || Age > maxAge)
-      {
-        CurrentState = ActivityState.Dead;
-        Health = 0;
-        Energy = 0;
-        _zeroEnergyTicks = 0;
-      }
-
-      // Extreme old age causes gradual health decline
-      if (Age > maxAge * 0.8) // After 80% of max age
-      {
-        double agingFactor = (double)(Age - maxAge * 0.8) / (maxAge * 0.2);
-        double agingDamage = 0.05 * agingFactor; // Gradual aging damage
-        Health = Math.Max(Health, Health - agingDamage);
-      }
-    }
-
-    private int GetMaxAge() =>
-      Role switch
-      {
-        AntRole.Queen => 10000,
-        _ => 1000
+        < 14 => DevelopmentStage.Egg,
+        < 35 => DevelopmentStage.Larva,
+        < 49 => DevelopmentStage.Pupa,
+        < 79 => DevelopmentStage.YoungAdult,
+        < Physiology.LongevityDays * 0.8 => DevelopmentStage.Adult,
+        < Physiology.LongevityDays => DevelopmentStage.Elder,
+        _ => DevelopmentStage.Dead
       };
+
+    protected virtual void ProcessMetabolism(double deltaTime)
+    {
+      if (DevelopmentStage < DevelopmentStage.YoungAdult)
+        return;
+
+      //  Base metabolic cost
+      double metabolicCost = Physiology.MetabolismRate * deltaTime;
+
+      //  Activity modifiers
+      metabolicCost *= GetActivityEnergyMultiplier();
+
+      //  Temperature effects
+      metabolicCost *= GetTemperatureMatabolismMultiplier();
+
+      ConsumeEnergy(metabolicCost);
+    }
+
+    private double GetActivityEnergyMultiplier() =>
+      CurrentState switch
+      {
+        ActivityState.Moving => 1.5,
+        ActivityState.Fighting => 2.0,
+        ActivityState.Building => 1.8,
+        ActivityState.Foraging => 1.3,
+        ActivityState.Resting => 0.3,
+        _ => 1.0
+      };
+
+    private double GetTemperatureMatabolismMultiplier()
+    {
+      //  Simplified temperature effect - could be enhanced with environment data
+      return 1.0;  //  TODO: Implement with environmental temperature
+    }
+
+    private void UpdateNutritionalStatus()
+    {
+      double energyRatio = Energy / MaxEnergy;
+      _nutritionalStatus = energyRatio switch
+      {
+        < 0.1 => NutritionalStatus.Starving,
+        < 0.3 => NutritionalStatus.Hungry,
+        < 0.9 => NutritionalStatus.Adequate,
+        < 1.0 => NutritionalStatus.WellFed,
+        _ => NutritionalStatus.Overfed
+      };
+    }
+
+    //  Constants
+    protected static readonly int TicksPerDay = 86400;  //  1 tick = 1 second
+    protected long CurrentTick { get; private set; }
+
+    //  Abstract behavior retrieval
+    protected abstract IAntBehavior? GetBehavior();
+
+    //  Vitals calculation based on caste
+    protected virtual double CalculateMaxVitals() =>
+      Caste switch
+      {
+        AntCaste.Queen => 200.0,    //  Queens are larger and more robust
+        AntCaste.Soldier => 120.0,  //  Soldiers are tough
+        AntCaste.Worker => 100.0,   //  Standard worker vitals
+        AntCaste.Forager => 90.0,   //  Foragers trade vitals for speed
+        _ => 80.0
+      };
+
+    // TODO: Add remaining methods (MoveTo, ConsumeEnergy, etc.) with enhanced logic
+
+    // ======================================================
+    //  Specialized QUEEN ant with reproductive capabilities
+    // ======================================================
+
+    public class QueenAnt(Position startPosition, IColony colony) : Ant(AntCaste.Queen, startPosition, colony)
+    {
+      public int EggsLaidToday { get; private set; }
+      public int EggsLaidTotal { get; private set; }
+      public double FertilityRate { get; private set; } = 1.0;
+
+      //  Queens live much longer and have different physiology
+      protected override AntPhysiology CreateDefaultPhysiology() =>
+        new(
+          metabolismRate: 0.3,      //  Very slow metabolism
+          maxCarryCapacity: 0.0,    //  Queens don't carry items
+          movementSpeed: 0.2,       //  Very slow movement
+          longevityDays: 7300,      //  ~20 years
+          pheromoneProduction: 5.0, //  Strong pheromone production
+          scentSensitivity: 0.3     //  Don't need to follow trails
+        );
+
+      protected override double GetBodyWeightMultiplier() =>
+        3.0;  //  Queens are much larger
+
+      protected override void OnDevelopmentStageChanged(DevelopmentStage newStage)
+      {
+        if (newStage == DevelopmentStage.Adult)
+          FertilityRate = 1.0;  //  Reach peak fertility
+        else if (newStage == DevelopmentStage.Elder)
+          FertilityRate *= 0.7; //  Reduced fertility in old age 
+      }
+
+      public bool CanLayEggs() =>
+        DevelopmentStage >= DevelopmentStage.Adult &&
+        Energy > MaxEnergy * 0.4 &&
+        NutritionalStatus >= NutritionalStatus.Adequate;
+
+      public int LayEggs(int maxEggs)
+      {
+        if (!CanLayEggs())
+          return 0;
+
+        int eggsToLay = Math.Min(maxEggs, GetMaxEggsForCurrentCondition());
+        double energyCost = eggsToLay * 2.0;  //  Each egg costs energy
+
+        if (Energy >= energyCost)
+        {
+          ConsumeEnergy(energyCost);
+          EggsLaidToday += eggsToLay;
+          EggsLaidTotal += eggsToLay;
+
+          return eggsToLay;
+        }
+
+        return 0;
+      }
+
+      private int GetMaxEggsForCurrentCondition()
+      {
+        int baseEggs = 50;  //  Base egg laying capacity
+
+        //  Modifiers based on condition
+        double multiplier = FertilityRate;
+
+        if (NutritionalStatus == NutritionalStatus.WellFed)
+          multiplier *= 1.5;
+        else if (NutritionalStatus == NutritionalStatus.Hungry)
+          multiplier *= 0.5;
+        else if (NutritionalStatus == NutritionalStatus.Starving)
+          multiplier *= 0.1;
+
+        return (int)(baseEggs * multiplier);
+      }
+
+      protected override IAntBehavior? GetBehavior() =>
+        //  Queens have specialized behavior focused on reproduction
+        AntBehaviorFactory.CreateBehavior(AntCaste.Queen);
+    }
+
+    // ==============================================================
+    //  Specialized WORKER ant with experience and skill development
+    // ==============================================================
+
+    public class WorkerAnt(Position startPosition, IColony colony) : Ant(AntCaste.Worker, startPosition, colony)
+    {
+      public double ExperienceLevel { get; private set; } = 0.0;
+      public HashSet<WorkerSpecialization> Specializations { get; } = [];
+      public int TasksCompleted { get; private set; }
+
+      protected override AntPhysiology CreateDefaultPhysiology() =>
+        new(
+          metabolismRate: 1.0,      //  Standard metabolism
+          maxCarryCapacity: 10.0,   //  Can carry 10x body weight
+          movementSpeed: 1.0,       //  Standard speed
+          longevityDays: 120,       //  ~4 months
+          scentSensitivity: 0.8,    //  Good trail following
+          pheromoneProduction: 1.0  //  Standard pheromone production
+        );
+
+      protected override double GetBodyWeightMultiplier() =>
+        1.0;  //  Standard body size
+
+      protected override void OnDevelopmentStageChanged(DevelopmentStage newStage)
+      {
+        if (newStage == DevelopmentStage.Adult)
+          //  Workers become more efficient as adults
+          ExperienceLevel = Math.Min(1.0, ExperienceLevel + 0.1);
+      }
+
+      public void GainExperience(double amount) =>
+        ExperienceLevel = Math.Min(2.0, ExperienceLevel + amount); //  Cap at 2x normal efficiency
+
+      public void CompleteTask(WorkerSpecialization specialization)
+      {
+        TasksCompleted++;
+        GainExperience(0.05);
+
+        //  Develop specialization over time
+        if (TasksCompleted % 10 == 0)
+          Specializations.Add(specialization);
+      }
+
+      protected override IAntBehavior? GetBehavior() =>
+        AntBehaviorFactory.CreateBehavior(AntCaste.Worker);
+
+      public enum WorkerSpecialization
+      {
+        Construction,  //  Building and maintenance
+        Nursing,       //  Brood care
+        Foraging,      //  Food collection
+        Maintenance,   //  Nest upkeep
+        Defense,       //  Guard duties
+        Excavation     //  Tunnel digging
+      }
+    }
   }
 }

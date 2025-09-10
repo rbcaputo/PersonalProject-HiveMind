@@ -2,91 +2,53 @@
 using HiveMind.Core.Domain.Entities;
 using HiveMind.Core.Domain.Enums;
 using HiveMind.Core.Domain.Interfaces;
+using HiveMind.Core.Domain.Services;
+using HiveMind.Core.ValueObjects;
 
 namespace HiveMind.Core.Domain.Behaviors
 {
-  /// <summary>
-  /// Behavior for forager ants - focused on finding and collecting food
-  /// </summary>
+  // ====================================================================
+  //  Behavior for FORAGER ants - focused on finding and collecting food
+  // ====================================================================
+
   public class ForagerBehavior : TaskBasedBehavior
   {
     private IFoodSource? _targetFoodSource;
     private readonly double _forageRadius = 30.0;
     private ForagerTaskType _currentTaskType = ForagerTaskType.SearchForFood;
+    private bool _isFollowingTrail = false;
+    private bool _isLayingTrail = false;
 
-    protected override int TaskUpdateInterval => 50; // Foragers are very active
+    protected override int TaskUpdateInterval => 50;  //  Foragers are very active
     protected override double GetRestThreshold() => 0.15;
     protected override double GetRestAmount() => 1.0;
     protected override double TaskCompletionDistance => 1.0;
 
     protected override void AssignNewTask(Ant ant, ISimulationContext context)
     {
-      // Determine what the forager should do next based on current state
-      if (ant.CarriedFood > 0)
-        // Carrying food - return to nest
-        AssignReturnToNestTask(ant);
-      else if (_targetFoodSource != null && !_targetFoodSource.IsExhausted)
-        // Has valid food source - go collect from it
-        AssignCollectFoodTask();
-      else
+      var pheromoneMap = GetPheromoneMap(context);
+      if (pheromoneMap == null)
       {
-        // Need to find food - search or explore
-        if (TryFindNearbyFoodSource(ant, context))
-          AssignMoveToFoodTask(ant);
-        else
-          AssignExploreTask(ant, context);
-      }
-    }
+        //  Fallback to basic behavior if no pheromone system
+        AssignBasicTask(ant, context);
 
-    protected override void ExecuteStationaryTask(Ant ant, ISimulationContext context)
-    {
-      if (CurrentTask == null)
         return;
-
-      switch (_currentTaskType)
-      {
-        case ForagerTaskType.CollectFood:
-          ExecuteCollectFoodTask(ant, context);
-          break;
-        case ForagerTaskType.DropFood:
-          ExecuteDropFoodTask(ant, context);
-          break;
-        default:
-          base.ExecuteStationaryTask(ant, context);
-          break;
       }
+
+      //  Decision making with pheromone awereness
+      if (ant.CarriedFood > 0)
+        AssignReturnToNestWithTrail(ant, pheromoneMap);
+      else if (ShouldFollowFoodTrail(ant, pheromoneMap))
+        AssignFollowFoodTrail(ant, pheromoneMap);
+      else if (_targetFoodSource != null && !_targetFoodSource.IsExhausted)
+        AssignMoveToKnownFoodSource(ant, pheromoneMap);
+      else
+        AssignExploreWithTrialAwereness(ant, context, pheromoneMap);
     }
 
-    protected override void OnTaskCompleted(Ant ant, ISimulationContext context, BehaviorTask task)
+    private void AssignReturnToNestWithTrail(Ant ant, PheromoneMap pheromoneMap)
     {
-      switch (_currentTaskType)
-      {
-        case ForagerTaskType.MoveToFood:
-          // Arrived at food source - start collecting
-          AssignCollectFoodTask();
-          break;
-        case ForagerTaskType.ReturnToNest:
-          // Arrived at nest - drop food
-          AssignDropFoodTask();
-          break;
-        case ForagerTaskType.Explore:
-          // Finished exploring - search for food again
-          ClearCurrentTask(); // Will trigger new task assignment
-          break;
-        case ForagerTaskType.CollectFood:
-        case ForagerTaskType.DropFood:
-          // These tasks complete themselves
-          ClearCurrentTask();
-          break;
-        default:
-          base.OnTaskCompleted(ant, context, task);
-          break;
-      }
-    }
-
-    private void AssignReturnToNestTask(Ant ant)
-    {
-      Position? nestPosition = GetSafeNestPosition(ant);
+      var nestPosition = GetSafeNestPosition(ant);
       if (nestPosition == null)
       {
         ClearCurrentTask();
@@ -95,130 +57,106 @@ namespace HiveMind.Core.Domain.Behaviors
       }
 
       _currentTaskType = ForagerTaskType.ReturnToNest;
-      BehaviorTask task = CreateTask(ActivityState.Moving, 0.1, nestPosition); // Low energy cost for returning
+      _isLayingTrail = true;  //  Lay food trail while returning
+
+      //  Use home trail to navigate if available
+      var homeGradient = pheromoneMap.GetPheromoneGradient(ant.Position, PheromoneType.HomeTrail, ant.Id);
+
+      Position targetPosition;
+      if (homeGradient.Magnitude > 0.1)
+      {
+        //  Follow home trail gradient
+        var direction = homeGradient.Normalized;
+        targetPosition = new(
+          ant.Position.X + direction.X * 10.0,
+          ant.Position.Y + direction.Y * 10.0
+        );
+      }
+      else
+        targetPosition = nestPosition.Value;
+
+      BehaviorTask task = CreateTask(ActivityState.Moving, 0.1, targetPosition);
       SetCurrentTask(task);
     }
 
-    private void AssignCollectFoodTask()
+    private bool ShouldFollowFoodTrail(Ant ant, PheromoneMap pheromoneMap)
     {
-      if (_targetFoodSource == null || _targetFoodSource.IsExhausted)
+      var foodTrailIntensity = pheromoneMap.GetPheromoneIntensity(
+        ant.Position,
+        PheromoneType.FoodTrail,
+        ant.Id  //  Exclude own trails
+      );
+
+      return foodTrailIntensity > 0.2;  //  Threshold for trail following
+    }
+
+    private void AssignFollowFoodTrail(Ant ant, PheromoneMap pheromoneMap)
+    {
+      _currentTaskType = ForagerTaskType.FollowTrail;
+      _isFollowingTrail = true;
+
+      Vector2 gradient = pheromoneMap.GetPheromoneGradient(ant.Position, PheromoneType.FoodTrail, ant.Id);
+      if (gradient.Magnitude > 0.01)
       {
-        ClearCurrentTask();
+        Vector2 direction = gradient.Normalized;
+        Position targetPosition = new(
+          ant.Position.X + direction.X * 5.0,
+          ant.Position.Y + direction.Y * 5.0
+        );
 
-        return;
+        BehaviorTask task = CreateTask(ActivityState.Moving, 0.2, targetPosition);
+        SetCurrentTask(task);
       }
-
-      _currentTaskType = ForagerTaskType.CollectFood;
-      BehaviorTask task = CreateTask(ActivityState.Foraging, 0.3); // Stationary task - no target position
-      SetCurrentTask(task);
+      else
+        //  Trail lost - switch to exploration
+        AssignExploreTask(ant, null);
     }
 
-    private void AssignMoveToFoodTask()
+    protected override void OnTaskCompleted(Ant ant, ISimulationContext context, BehaviorTask task)
     {
-      if (_targetFoodSource == null)
+      var pheromoneMap = GetPheromoneMap(context);
+
+      //  Lay pheromone trails during movement
+      if (_isLayingTrail && pheromoneMap != null)
+        LayPheromoneTrail(ant, pheromoneMap);
+
+      base.OnTaskCompleted(ant, context, task);
+    }
+
+    private void LayPheromoneTrail(Ant ant, PheromoneMap pheromoneMap)
+    {
+      if (ant.CarriedFood > 0)
       {
-        ClearCurrentTask();
-
-        return;
+        //  Lay food trail when carrying food back to nest
+        var intensity = Math.Min(5.0, ant.CarriedFood);  //  Trail strength based on food amount
+        pheromoneMap.DepositPheromone(ant.Position, PheromoneType.FoodTrail, intensity, ant.Id);
       }
-
-      _currentTaskType = ForagerTaskType.MoveToFood;
-      BehaviorTask task = CreateTask(ActivityState.Moving, 0.2, _targetFoodSource.Position);
-      SetCurrentTask(task);
+      else
+        //  Lay home trail when searching (weaker)
+        pheromoneMap.DepositPheromone(ant.Position, PheromoneType.HomeTrail, 1.0, ant.Id);
     }
 
-    private void AssignExploreTask(Ant ant, ISimulationContext context)
+    private PheromoneMap? GetPheromoneMap(ISimulationContext context)
     {
-      Position? exploreTarget = GenerateExploreTarget(ant, context);
-      if (exploreTarget == null)
-      {
-        ClearCurrentTask();
+      //  This would be injected through the context in a full implementation
+      //  For now, return null to maintain compilation
 
-        return;
-      }
-
-      _currentTaskType = ForagerTaskType.Explore;
-      BehaviorTask task = CreateTask(ActivityState.Moving, 0.2, exploreTarget);
-      SetCurrentTask(task);
+      return context.Environment as IPheromoneEnvironment;
     }
 
-    private void AssignDropFoodTask()
+    private void AssignBasicTask(Ant ant, ISimulationContext context)
     {
-      _currentTaskType = ForagerTaskType.DropFood;
-      BehaviorTask task = CreateTask(ActivityState.Idle, 0.1); // Stationary task
-      SetCurrentTask(task);
+      //  Fallback to original behavior logic
+      if (ant.CarriedFood > 0)
+        AssignReturnToNestTask(ant);
+      else
+        AssignExploreTask(ant, context);
     }
 
-    private void ExecuteCollectFoodTask(Ant ant, ISimulationContext context)
-    {
-      if (_targetFoodSource == null || _targetFoodSource.IsExhausted)
-      {
-        _targetFoodSource = null;
-        CompleteCurrentTask(ant, context);
+    // ==========================================
+    //  Types of tasks that foragers can perform
+    // ==========================================
 
-        return;
-      }
-
-      // Collect food
-      double harvestedAmount = SafeHarvestFood(_targetFoodSource, 5.0);
-      if (harvestedAmount > 0)
-        SafeCollectFood(ant, harvestedAmount);
-
-      // Check if should continue collecting or return
-      if (_targetFoodSource.IsExhausted || ant.CarriedFood >= 10)
-      {
-        _targetFoodSource = null;
-        CompleteCurrentTask(ant, context);
-      }
-      // If still collecting, the task continues
-    }
-
-    private void ExecuteDropFoodTask(Ant ant, ISimulationContext context)
-    {
-      // Drop food at nest
-      double droppedFood = SafeDropFood(ant);
-      if (droppedFood > 0 && ant.Colony != null)
-        SafeAddFoodToColony(ant.Colony, droppedFood);
-
-      CompleteCurrentTask(ant, context);
-    }
-
-    private bool TryFindNearbyFoodSource(Ant ant, ISimulationContext context)
-    {
-      IReadOnlyCollection<IFoodSource> foodSources = SafeGetFoodSources(context.Environment);
-      List<(IFoodSource source, double distance)> nearbyFoodSources = [];
-
-      foreach (IFoodSource foodSource in foodSources)
-        if (!foodSource.IsExhausted)
-        {
-          double distance = SafeCalculateDistance(foodSource.Position, ant.Position);
-          if (distance <= _forageRadius)
-            nearbyFoodSources.Add((foodSource, distance));
-        }
-
-      if (nearbyFoodSources.Count > 0)
-      {
-        // Select closest food source
-        _targetFoodSource = nearbyFoodSources.OrderBy(fs => fs.distance).First().source;
-
-        return true;
-      }
-
-      _targetFoodSource = null;
-
-      return false;
-    }
-
-    private Position? GenerateExploreTarget(Ant ant, ISimulationContext context)
-    {
-      Position nestPosition = GetSafeNestPosition(ant) ?? ant.Position;
-
-      return GenerateSafePosition(nestPosition, _forageRadius, context);
-    }
-
-    /// <summary>
-    /// Types of tasks that foragers can perform
-    /// </summary>
     private enum ForagerTaskType
     {
       SearchForFood,
