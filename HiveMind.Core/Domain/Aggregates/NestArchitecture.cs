@@ -802,34 +802,6 @@ namespace HiveMind.Core.Domain.Aggregates
     public double TrafficEfficiency { get; set; }
   }
 
-  // -------------------------------------------
-  //  Represents a planned construction project
-  // -------------------------------------------
-
-  public class ConstructionProject(
-  ChamberType targetType,
-  Position proposedLocation,
-  double estimatedWorkDays,
-  int requiredWorkers
-  )
-  {
-    public ChamberType TargetType { get; } = targetType;
-    public Position ProposedLocation { get; } = proposedLocation;
-    public double EstimatedWorkDays { get; } = estimatedWorkDays;
-    public int RequiredWorkers { get; } = requiredWorkers;
-    public DateTime PlannedAt { get; } = DateTime.UtcNow;
-    public List<ResourceRequirement> Materials { get; } = new();
-    public Priority Priority { get; set; } = Priority.Medium;
-    public string? Notes { get; set; }
-  }
-
-  public class ResourceRequirement(string resourceType, double quantity, string unit = "units")
-  {
-    public string ResourceType { get; } = resourceType;
-    public double Quantity { get; } = quantity;
-    public string Unit { get; } = unit;
-  }
-
   // -----------------------------------------------------------
   //  Represents colony needs that drive construction decisions
   // -----------------------------------------------------------
