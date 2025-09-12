@@ -3,7 +3,7 @@ using HiveMind.Core.Domain.Entities;
 using HiveMind.Core.Domain.Enums;
 using HiveMind.Core.Domain.Interfaces;
 using HiveMind.Core.Domain.Services;
-using HiveMind.Core.ValueObjects;
+using HiveMind.Core.Domain.ValueObjects;
 
 namespace HiveMind.Core.Domain.Behaviors
 {
@@ -142,15 +142,6 @@ namespace HiveMind.Core.Domain.Behaviors
       //  For now, return null to maintain compilation
 
       return context.Environment as IPheromoneEnvironment;
-    }
-
-    private void AssignBasicTask(Ant ant, ISimulationContext context)
-    {
-      //  Fallback to original behavior logic
-      if (ant.CarriedFood > 0)
-        AssignReturnToNestTask(ant);
-      else
-        AssignExploreTask(ant, context);
     }
 
     // ==========================================

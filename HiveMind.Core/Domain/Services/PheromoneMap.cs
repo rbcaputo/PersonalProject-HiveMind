@@ -1,5 +1,5 @@
 ﻿using HiveMind.Core.Domain.Common;
-using HiveMind.Core.ValueObjects;
+using HiveMind.Core.Domain.ValueObjects;
 
 namespace HiveMind.Core.Domain.Services
 {

@@ -5,9 +5,10 @@ using HiveMind.Core.Domain.Interfaces;
 
 namespace HiveMind.Core.Domain.Behaviors
 {
-  /// <summary>
-  /// Base class for ant behaviors providing common error handling and safety methods
-  /// </summary>
+  // ---------------------------------------------------------------------------------
+  //  Base class for ant behaviors providing common error handling and safety methods
+  // ---------------------------------------------------------------------------------
+
   public abstract class BaseBehavior : IAntBehavior
   {
     protected const double MAX_REASONABLE_ENERGY_CONSUMPTION = 10.0;
@@ -16,21 +17,16 @@ namespace HiveMind.Core.Domain.Behaviors
 
     public abstract void Update(Ant ant, ISimulationContext context);
 
-    /// <summary>
-    /// Validates input parameters for behavior methods
-    /// </summary>
+    //  Validates input parameters for behavior methods
     protected static bool ValidateInputs(Ant ant, ISimulationContext context) =>
       ant.IsAlive && context.Environment != null && context.Random != null;
 
-    /// <summary>
-    /// Checks if ant is in a valid state for behavior operations
-    /// </summary>
+
+    //  Checks if ant is in a valid state for behavior operations
     protected static bool IsAntOperational(Ant ant) =>
       ant.IsAlive && ant.CurrentState != ActivityState.Dead && ant.Health > 0;
 
-    /// <summary>
-    /// Safely calculates distance between two positions
-    /// </summary>
+    //  Safely calculates distance between two positions
     protected static double SafeCalculateDistance(Position pos1, Position pos2)
     {
       try
@@ -42,13 +38,11 @@ namespace HiveMind.Core.Domain.Behaviors
       }
       catch
       {
-        return double.MaxValue; // Safe fallback - indicates unreachable
+        return double.MaxValue; //  Safe fallback - indicates unreachable
       }
     }
 
-    /// <summary>
-    /// Safely moves ant to target position with bounds checking
-    /// </summary>
+    //  Safely moves ant to target position with bounds checking
     protected static bool SafeMoveTo(Ant ant, Position target, ISimulationContext context)
     {
       try
@@ -56,7 +50,7 @@ namespace HiveMind.Core.Domain.Behaviors
         if (!IsAntOperational(ant))
           return false;
 
-        // Validate target position is within environment bounds
+        //  Validate target position is within environment bounds
         if (!target.IsValid || !context.Environment.IsValidPosition(target))
           return false;
 
@@ -66,13 +60,11 @@ namespace HiveMind.Core.Domain.Behaviors
       }
       catch
       {
-        return false; // Movement failed
+        return false; //  Movement failed
       }
     }
 
-    /// <summary>
-    /// Safely sets ant state with validation
-    /// </summary>
+    //  Safely sets ant state with validation
     protected static bool SafeSetState(Ant ant, ActivityState newState)
     {
       try
@@ -86,13 +78,11 @@ namespace HiveMind.Core.Domain.Behaviors
       }
       catch
       {
-        return false; // State change failed
+        return false; //  State change failed
       }
     }
 
-    /// <summary>
-    /// Safely consumes energy with bounds checking
-    /// </summary>
+    //  Safely consumes energy with bounds checking
     protected static bool SafeConsumeEnergy(Ant ant, double amount)
     {
       try
@@ -103,8 +93,8 @@ namespace HiveMind.Core.Domain.Behaviors
         if (amount < 0 || amount > MAX_REASONABLE_ENERGY_CONSUMPTION)
           return false;
 
-        if (amount > ant.Energy + 1.0) // Allow slight overconsumption for realism
-          amount = Math.Max(0, ant.Energy); // Consume all remaining energy
+        if (amount > ant.Energy + 1.0)  //  Allow slight overconsumption for realism
+          amount = Math.Max(0, ant.Energy);  //  Consume all remaining energy
 
         ant.ConsumeEnergy(amount);
 
@@ -112,13 +102,11 @@ namespace HiveMind.Core.Domain.Behaviors
       }
       catch
       {
-        return false; // Energy consumption failed
+        return false;  //  Energy consumption failed
       }
     }
 
-    /// <summary>
-    /// Safely restores energy with bounds checking
-    /// </summary>
+    //  Safely restores energy with bounds checking
     protected static bool SafeRestoreEnergy(Ant ant, double amount)
     {
       try
@@ -135,13 +123,11 @@ namespace HiveMind.Core.Domain.Behaviors
       }
       catch
       {
-        return false; // Energy restoration failed
+        return false;  //  Energy restoration failed
       }
     }
 
-    /// <summary>
-    /// Safely drops food from ant
-    /// </summary>
+    //  Safely drops food from ant
     protected static double SafeDropFood(Ant ant)
     {
       try
@@ -153,13 +139,11 @@ namespace HiveMind.Core.Domain.Behaviors
       }
       catch
       {
-        return 0; // No food dropped
+        return 0;  //  No food dropped
       }
     }
 
-    /// <summary>
-    /// Safely collects food for ant
-    /// </summary>
+    //  Safely collects food for ant
     protected static bool SafeCollectFood(Ant ant, double amount)
     {
       try
@@ -176,20 +160,17 @@ namespace HiveMind.Core.Domain.Behaviors
       }
       catch
       {
-        return false; // Food collection failed
+        return false;  //  Food collection failed
       }
     }
 
-    /// <summary>
-    /// Safely harvests food from source
-    /// </summary>
+    //  Safely harvests food from source
     protected static double SafeHarvestFood(IFoodSource source, double amount)
     {
       try
       {
         if (source == null || source.IsExhausted)
           return 0;
-
         if (amount <= 0 || amount > MAX_REASONABLE_FOOD_AMOUNT)
           return 0;
 
@@ -197,13 +178,11 @@ namespace HiveMind.Core.Domain.Behaviors
       }
       catch
       {
-        return 0; // No food harvested
+        return 0;  //  No food harvested
       }
     }
 
-    /// <summary>
-    /// Safely adds food to colony
-    /// </summary>
+    //  Safely adds food to colony
     protected static bool SafeAddFoodToColony(IColony colony, double amount)
     {
       try
@@ -217,13 +196,11 @@ namespace HiveMind.Core.Domain.Behaviors
       }
       catch
       {
-        return false; // Food addition failed
+        return false;  //  Food addition failed
       }
     }
 
-    /// <summary>
-    /// Safely gets food sources from environment
-    /// </summary>
+    //  Safely gets food sources from environment
     protected static IReadOnlyCollection<IFoodSource> SafeGetFoodSources(IEnvironment environment)
     {
       try
@@ -232,13 +209,11 @@ namespace HiveMind.Core.Domain.Behaviors
       }
       catch
       {
-        return []; // Empty collection
+        return [];  //  Empty collection
       }
     }
 
-    /// <summary>
-    /// Generates a safe position within environment bounds
-    /// </summary>
+    //  Generates a safe position within environment bounds
     protected static Position? GenerateSafePosition(Position center, double maxDistance, ISimulationContext context)
     {
       try
@@ -259,18 +234,18 @@ namespace HiveMind.Core.Domain.Behaviors
             return candidatePosition;
         }
 
-        // Fallback - return center position if no valid position found
-        return environment.IsValidPosition(center) ? center : null;
+        //  Fallback - return center position if no valid position found
+        return environment.IsValidPosition(center)
+          ? center
+          : null;
       }
       catch
       {
-        return null; // Position generation failed
+        return null;  //  Position generation failed
       }
     }
 
-    /// <summary>
-    /// Gets the nest position safely
-    /// </summary>
+    //  Gets the nest position safely
     protected static Position? GetSafeNestPosition(Ant ant)
     {
       try
@@ -279,42 +254,38 @@ namespace HiveMind.Core.Domain.Behaviors
       }
       catch
       {
-        return null; // Nest position not available
+        return null;  //  Nest position not available
       }
     }
 
-    /// <summary>
-    /// Handles behavior errors gracefully with error recovery
-    /// </summary>
+    //  Handles behavior errors gracefully with error recovery
     protected static void HandleBehaviorError(Ant ant, Exception ex, string methodName)
     {
       try
       {
-        // Set ant to safe idle state if possible
+        //  Set ant to safe idle state if possible
         if (ant.IsAlive && ant.CurrentState != ActivityState.Dead)
           SafeSetState(ant, ActivityState.Idle);
 
-        // Log error information (would integrate with logging system)
-        // Could implement error telemetry here
+        //  Log error information (would integrate with logging system)
+        //  Could implement error telemetry here
       }
       catch
       {
-        // Ultimate fallback - do nothing to prevent cascading failures
+        //  Ultimate fallback - do nothing to prevent cascading failures
       }
     }
 
-    /// <summary>
-    /// Performs safe behavior update with comprehensive error handling
-    /// </summary>
+    //  Performs safe behavior update with comprehensive error handling
     protected static void SafeUpdate(Ant ant, ISimulationContext context, Action<Ant, ISimulationContext> updateAction)
     {
       try
       {
-        // Pre-update validation
+        //  Pre-update validation
         if (!ValidateInputs(ant, context) || !IsAntOperational(ant))
           return;
 
-        // Execute the behavior-specific update logic
+        //  Execute the behavior-specific update logic
         updateAction(ant, context);
       }
       catch (Exception ex)

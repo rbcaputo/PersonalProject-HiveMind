@@ -1,4 +1,4 @@
-﻿namespace HiveMind.Core.ValueObjects
+﻿namespace HiveMind.Core.Domain.ValueObjects
 {
   // ===================================================
   //  Represents a pheromone deposit in the environment

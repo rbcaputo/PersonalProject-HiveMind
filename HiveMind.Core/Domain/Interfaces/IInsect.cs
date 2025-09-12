@@ -14,7 +14,7 @@ namespace HiveMind.Core.Domain.Interfaces
     ActivityState CurrentState { get; }
     double Health { get; }
     double Energy { get; }
-    int Age { get; }
+    int AgeDays { get; }
     bool IsAlive { get; }
 
     /// <summary>
